@@ -1,0 +1,514 @@
+{
+  "app": {
+    "name": "Endaxis"
+  },
+  "common": {
+    "cancel": "Отмена",
+    "close": "Закрыть",
+    "copy": "Копировать",
+    "delete": "Удалить",
+    "default": "По умолчанию",
+    "export": "Экспорт",
+    "all": "все",
+    "language": "Язык",
+    "load": "Загрузить",
+    "moveDown": "Переместить вниз",
+    "moveUp": "Переместить вверх",
+    "new": "new",
+    "noneParen": "(нет)",
+    "off": "off",
+    "old": "old",
+    "on": "on",
+    "paste": "Вставить",
+    "receive": "Импорт",
+    "reset": "Сброс",
+    "type": "Тип",
+    "triggerTime": "Активация",
+    "stacks": "Стаки",
+    "duration": "Длительность",
+    "unequip": "Снять",
+    "uncategorized": "Без категории",
+    "unknown": "Неизвестно",
+    "unknownSkill": "Неизвестный навык",
+    "levelSuffix": "ур.",
+    "size": {
+      "large": "L",
+      "medium": "M",
+      "small": "S"
+    },
+    "warning": "Предупреждение"
+  },
+  "locale": {
+    "en": "English",
+    "ru": "Русский",
+    "zhCN": "简体中文"
+  },
+  "timeline": {
+    "export": {
+      "copyCode": "Копировать дата-код",
+      "dialogTitle": "Настройки экспорта",
+      "durationHintMax": "Максимум {max}с",
+      "durationLabel": "Длительность экспорта (сек.)",
+      "exportImage": "Экспорт изображения",
+      "exportJson": "Экспорт JSON",
+      "failed": "Ошибка экспорта: {msg}",
+      "filenameLabel": "Имя файла",
+      "filenamePlaceholder": "Введите имя файла",
+      "imageExported": "Изображение таймлайна экспортировано: {filename}",
+      "rendering": "Рендеринг изображения таймлайна для первых {seconds} сек..."
+    },
+    "header": {
+      "languageTooltip": "Язык",
+      "loadTooltip": "Импорт .json файла проекта или .png изображения",
+      "receiveTooltip": "Вставьте дата-код для импорта проекта",
+      "resetTooltip": "Полный сброс"
+    },
+    "import": {
+      "dialogAlert": "Внимание: импорт перезапишет все данные проекта. Рекомендуется сохранить текущий проект!",
+      "dialogConfirm": "Подтвердить перезапись и импорт",
+      "dialogHint": "Вставьте дата-код:",
+      "dialogPlaceholder": "Вставьте длинную строку сюда...",
+      "dialogTitle": "Импорт проекта",
+      "dropHint": "Перетащите файл для импорта",
+      "failed": "Ошибка загрузки: {msg}",
+      "pngNoData": "Это изображение не содержит действительных данных проекта ENDAXIS",
+      "pngSuccess": "Проект успешно загружен из изображения!",
+      "projectLoaded": "Проект успешно загружен!"
+    },
+    "share": {
+      "copied": "Код скопирован в буфер обмена! Вы можете отправить его друзьям для импорта.",
+      "copyFailed": "Не удалось сгенерировать дата-код: {msg}",
+      "inputRequired": "Пожалуйста, введите дата-код",
+      "imported": "Проект успешно импортирован!",
+      "importFailed": "Неверный формат дата-кода или поврежденные данные"
+    },
+    "mobile": {
+      "time": "Время",
+      "import": "Импорт",
+      "importing": "Импорт...",
+      "more": "Ещё",
+      "loadout": {
+        "title": "Экипировка",
+        "openAria": "Посмотреть экипировку: {name}",
+        "weapon": "Оружие",
+        "equipment": "Снаряжение",
+        "none": "Не экипировано",
+        "slot": {
+          "armor": "Броня",
+          "gloves": "Перчатки",
+          "accessory1": "Амуниция 1",
+          "accessory2": "Амуниция 2"
+        }
+      },
+      "actionInfo": {
+        "title": "Информация о навыке",
+        "notFound": "Навык не найден (возможно, проект изменён или данные обновлены)",
+        "start": "Время начала",
+        "end": "Время окончания",
+        "duration": "Длительность"
+      }
+    },
+    "attack": {
+      "enhancedAttack": "Усиленная атака"
+    },
+    "loading": "Загрузка ресурсов...",
+    "reset": {
+      "confirm": "Вы уверены, что хотите очистить весь текущий прогресс? Это удалит все данные проекта.",
+      "confirmButton": "Подтвердить сброс",
+      "done": "Сброс проекта выполнен"
+    },
+    "scenario": {
+      "addTooltip": "Новый проект",
+      "defaultName": "Проект {index}",
+      "copySuffix": "Копия",
+      "deleteConfirm": "Вы уверены, что хотите удалить этот проект? Это действие нельзя отменить.",
+      "deleteTitle": "Удалить проект",
+      "deleteTooltip": "Удалить текущий проект",
+      "deleted": "Проект удален",
+      "duplicateTooltip": "Копировать текущий проект",
+      "duplicated": "Проект скопирован",
+      "limit": "Достигнуто максимальное количество проектов ({max})",
+      "renameTooltip": "Переименовать текущий проект",
+      "unnamed": "Безымянный проект"
+    },
+    "shortcut": {
+      "boxSelectOff": "Режим рамки: Выкл",
+      "boxSelectOn": "Режим рамки: Вкл",
+      "connectionTool": "Инструмент связей: {state}",
+      "copied": "Скопировано",
+      "cursorGuideOff": "Направляющие: Скрыты",
+      "cursorGuideOn": "Направляющие: Вкл",
+      "pasted": "Вставлено",
+      "redo": "Повтор",
+      "snapMode01": "0.1с",
+      "snapModeFrame": "1 кадр (1/60с)",
+      "snapPrecision": "Точность привязки: {mode}",
+      "undo": "Отмена"
+    }
+  },
+  "timelineGrid": {
+    "action": {
+      "locked": "Заблокировано"
+    },
+    "alignGuide": {
+      "alignLeft": "Выровнять влево",
+      "alignRight": "Выровнять вправо",
+      "snapBack": "Прикрепить сзади",
+      "snapFront": "Прикрепить спереди"
+    },
+    "alignResult": {
+      "alignedLeft": "Выровнено влево",
+      "alignedRight": "Выровнено вправо",
+      "snappedBack": "Прикреплено сзади",
+      "snappedFront": "Прикреплено спереди",
+      "unchanged": "Позиция не изменилась"
+    },
+    "cursor": {
+      "sp": "ОН",
+      "stagger": "Ошеломление",
+      "gauge": "Заряд"
+    },
+    "cycleBoundary": "Граница цикла",
+    "prep": {
+      "title": "Подготовка к бою",
+      "expand": "Нажмите, чтобы развернуть",
+      "collapseTitle": "Свернуть область подготовки",
+      "setDurationTitle": "Установить длительность подготовки"
+    },
+    "ruler": {
+      "gameTimeCollapseTitle": "Игровое время (нажмите, чтобы свернуть)",
+      "realTimeTitle": "Реальное время",
+      "gameTimeExpandTitle": "Развернуть таймлайн"
+    },
+    "elementFilter": {
+      "all": "Все",
+      "blaze": "Огонь",
+      "cold": "Холод",
+      "emag": "Электро",
+      "nature": "Природа",
+      "physical": "Физ."
+    },
+    "equipmentDialog": {
+      "allCategories": "Все категории",
+      "allLevels": "Все уровни",
+      "empty": "Подходящего снаряжения не найдено",
+      "refine": "Доработка",
+      "refineBase": "Без доработки",
+      "refineTier": "Доработка {tier}",
+      "searchPlaceholder": "Поиск по названию/ID...",
+      "title": "Выбор снаряжения - {slot}",
+      "uncategorized": "Без категории",
+      "unequipTooltip": "Снять предмет"
+    },
+    "equipmentSlot": {
+      "accessory1": "Амуниция 1",
+      "accessory2": "Амуниция 2",
+      "armor": "Броня",
+      "equipment": "Снаряжение",
+      "gloves": "Перчатки"
+    },
+    "operatorDialog": {
+      "clearTrack": "Очистить текущую дорожку",
+      "empty": "Оперативник не найден",
+      "inTeam": "В команде",
+      "searchPlaceholder": "Поиск по имени...",
+      "title": "Сменить оперативника"
+    },
+    "selection": {
+      "deleted": "Удалено",
+      "selectedCount": "Выбрано: {count}"
+    },
+    "toolbar": {
+      "boxSelect": "Рамка (Ctrl+B)",
+      "compilerToggle": "Новый компилятор (Ctrl+G)",
+      "connectionTool": "Связи (Alt+L)",
+      "cursorGuide": "Направляющие (Ctrl+G)",
+      "snapPrecision": "Точность привязки (Alt+S)"
+    },
+    "track": {
+      "changeOperatorTooltip": "Сменить оперативника",
+      "operatorAlreadyInUse": "Этот оперативник уже на другой дорожке!",
+      "selectOperator": "Выбрать ОП",
+      "selectWeaponTooltip": "Выбрать оружие",
+      "setBonusActive": "Бонус активен"
+    },
+    "weaponDialog": {
+      "empty": "Оружие не найдено",
+      "equipped": "Экипировано",
+      "searchPlaceholder": "Поиск по названию...",
+      "title": "Выбрать оружие",
+      "unequipTooltip": "Снять текущее оружие"
+    }
+  },
+  "actionLibrary": {
+    "fallback": {
+      "noEquip": "Нет снаряжения",
+      "noOperator": "Нет ОП",
+      "noWeapon": "Оружие не экипировано"
+    },
+    "panels": {
+      "operatorStats": "Показатели ОП",
+      "weaponStats": "Показатели оружия",
+      "equipmentRefine": "Доработка"
+    },
+    "labels": {
+      "initialCharge": "Начальные ОН",
+      "maxCharge": "Макс. ОН",
+      "chargeEfficiency": "Восстановление суперэнергии",
+      "linkCdReduction": "Откат комбонавыка",
+      "originiumArtsPower": "Сила искусств",
+      "commonSlot1": "Атрибут 1",
+      "commonSlot2": "Атрибут 2",
+      "exclusiveBuff": "Эксклюзивный бафф",
+      "armor": "Броня",
+      "gloves": "Перчатки",
+      "accessory1": "Амуниция 1",
+      "accessory2": "Амуниция 2"
+    },
+    "section": {
+      "weaponBuffLibrary": "Баффы оружия",
+      "setBuffLibrary": "Баффы снаряжения",
+      "operatorSkillLibrary": "Навыки оператора"
+    },
+    "hints": {
+      "noRefineNon70": "Без доработки до 70 ур.",
+      "dragWeaponBuff": "Перетащите бафф оружия на дорожку. Позиция = время начала",
+      "dragSetBuff": "Перетащите бафф сета на дорожку. Позиция = время начала",
+      "clickOrDrag": "Нажмите для ред. знач. / Перетащите для расп. на таймлайне"
+    },
+    "suffix": {
+      "equipment": "Снаряжение"
+    },
+    "tabs": {
+      "operator": "ОП",
+      "set": "СЕТ",
+      "setNeedEquip": "Сначала экипируйте любую броню",
+      "weapon": "ОРУЖ",
+      "weaponNeedSelect": "Выберите оружие для текущего ОП"
+    }
+  },
+  "skillType": {
+    "attack": "Последний удар",
+    "dodge": "Уклонение",
+    "execution": "Добивание",
+    "skill": "Навык",
+    "link": "Комбо",
+    "ultimate": "Ультимейт",
+    "weapon": "Оружие",
+    "set": "Сет",
+    "unknown": "Навык"
+  },
+  "enemyTier": {
+    "normal": "Обычный",
+    "elite": "Элитный",
+    "champion": "Чемпион",
+    "head": "Главарь",
+    "boss": "Босс"
+  },
+  "weapon": {
+    "skill": "Навык оружия",
+    "effect": "Эффект оружия"
+  },
+  "contextMenu": {
+    "lockPosition": "Заблокировать",
+    "unlockPosition": "Разблокировать",
+    "disableCalc": "Отключить",
+    "enableCalc": "Включить",
+    "color": "Цвет",
+    "connectionSettings": "Настройки связей",
+    "setSourcePort": "Установить точку выхода",
+    "setTargetPort": "Установить точку входа",
+    "globalOps": "Глобальные операции",
+    "addCycleBoundary": "Добавить границу цикла",
+    "addSwitchEvent": "Сменить персонажа на..."
+  },
+  "connection": {
+    "connect": "Связать",
+    "dragToConnect": "Перетащите для связи",
+    "deleteHint": "Выберите левой кнопкой и нажмите Delete для удаления",
+    "direction": {
+      "to": "to",
+      "from": "from"
+    },
+    "port": {
+      "right": "R",
+      "left": "L",
+      "top": "T",
+      "bottom": "B",
+      "topRight": "TR",
+      "bottomRight": "BR",
+      "topLeft": "TL",
+      "bottomLeft": "BL"
+    },
+    "portPosition": {
+      "topLeft": "Верх. лев.",
+      "top": "Верх",
+      "topRight": "Верх. пр.",
+      "left": "Лево",
+      "center": "Центр",
+      "right": "Право",
+      "bottomLeft": "Низ. лев.",
+      "bottom": "Низ",
+      "bottomRight": "Низ. пр."
+    }
+  },
+  "effects": {
+    "group": {
+      "exclusive": "Эксклюзивные эффекты",
+      "physical": "Физическое состояние",
+      "attach": "Поражение искусствами",
+      "burst": "Взрыв искусств",
+      "status": "Статус",
+      "other": "Другое"
+    },
+    "name": {
+      "break": "Уязвимость",
+      "armor_break": "Прорыв",
+      "stagger": "Разгром",
+      "knockdown": "Опрокидывание",
+      "knockup": "Подбрасывание",
+      "blaze_attach": "Поражение теплом",
+      "emag_attach": "Поражение электричеством",
+      "cold_attach": "Криогенное поражение",
+      "nature_attach": "Поражение природой",
+      "blaze_burst": "Тепловзрыв",
+      "emag_burst": "Электризация",
+      "cold_burst": "Криовзрыв",
+      "nature_burst": "Природный взрыв",
+      "burning": "Возгорание",
+      "conductive": "Электризация",
+      "frozen": "Застывание",
+      "ice_shatter": "Раскол",
+      "corrosion": "Коррозия",
+      "default": "По умолчанию"
+    }
+  },
+  "propertiesPanel": {
+    "noSelection": "Навык не выбран",
+    "globalMode": "Глобальный режим",
+    "sections": {
+      "basic": "Базовые атрибуты"
+    },
+    "labels": {
+      "durationS": "Время(с)",
+      "cooldownS": "КД(с)",
+      "triggerWindowS": "Активация(с)",
+      "spCost": "Расход ОН",
+      "gaugeCost": "Стоимость заряда",
+      "gaugeGain": "ОН",
+      "teamGaugeGain": "ОН (общ.)",
+      "enhancementTimeS": "Время усиления (с)",
+      "followupDelayS": "Задержка до следующей (с)",
+      "comboSegment": "Сегмент комбо",
+      "comboLink": "Связь комбо"
+    },
+    "combo": {
+      "unlink": "Отвязать",
+      "relink": "Связать"
+    },
+    "damage": {
+      "title": "Удары",
+      "system": "Система триггеров",
+      "stagger": "Ошеломление",
+      "sp": "ОН",
+      "empty": "Нет ударов",
+      "tickTime": "Время",
+      "tickStagger": "Ошел.",
+      "tickSpGain": "ОН",
+      "bindEffects": "Привязать статус",
+      "bindPlaceholder": "Выберите статус"
+    },
+    "bars": {
+      "title": "Кастом. таймлайн",
+      "system": "Система таймингов",
+      "activeItems": "Активные записи",
+      "empty": "Нет таймлайнов",
+      "namePlaceholder": "Имя записи",
+      "offsetS": "Активация (с)",
+      "durationS": "Время (с)"
+    },
+    "effects": {
+      "title": "Статус эффекты",
+      "addEffect": "Добавить",
+      "addRow": "Добавить",
+      "editing": "Изм. [{row}:{col}]",
+      "selectPlaceholder": "Выберите статус"
+    },
+    "connections": {
+      "title": "Связи навыков",
+      "system": "Связи",
+      "currentCount": "кол-во",
+      "chooseTarget": "Цель",
+      "new": "Добавить",
+      "empty": "Нет связей",
+      "thisSkill": "Этот навык",
+      "outPort": "out",
+      "inPort": "in",
+      "consume": "Поглощает",
+      "consumed": "Поглощается",
+      "offset": "Смещение"
+    }
+  },
+  "resourceMonitor": {
+    "sections": {
+      "enemy": "Атрибуты врага",
+      "team": "Атрибуты команды"
+    },
+    "labels": {
+      "maxStagger": "Макс. ошеломление",
+      "staggerNodes": "Узлы ошеломления",
+      "nodeDuration": "Длит. пробития узла",
+      "breakDuration": "Длит. пробития",
+      "executionRecovery": "Восст. добивания",
+      "initialSp": "Начальные ОН",
+      "spPerSecond": "ОН/сек."
+    },
+    "sp": {
+      "insufficient": "недостаточно"
+    },
+    "enemy": {
+      "custom": "Настраиваемый враг",
+      "unknown": "Неизвестный враг",
+      "clickToChange": "Сменить врага",
+      "dialogTitle": "Выбрать врага",
+      "searchPlaceholder": "Поиск врага...",
+      "specialGroup": "Особые",
+      "customDesc": "Ручная настройка",
+      "desc": "Макс:{max} | Узлы:{nodes}",
+      "empty": "Враги не найдены"
+    }
+  },
+  "stats": {
+    "primary_ability": "Основной показатель",
+    "secondary_ability": "Побочный показатель",
+    "strength": "Сила",
+    "agility": "Ловкость",
+    "intellect": "Интеллект",
+    "will": "Воля",
+    "attack": "Атака",
+    "hp": "ОЗ",
+    "crit_rate": "Шанс крит. удара",
+    "crit_dmg": "Крит. урон",
+    "blaze_dmg": "Тепловой УРН",
+    "emag_dmg": "Электрический УРН",
+    "cold_dmg": "Криогенный УРН",
+    "nature_dmg": "Природный УРН",
+    "healing_effect": "Эффективность лечения",
+    "physical_dmg": "Физический УРН",
+    "arts_dmg": "УРН искусств",
+    "attack_dmg_bonus": "Бонус урона обычной атаки",
+    "skill_dmg_bonus": "Бонус урона навыка",
+    "link_dmg_bonus": "Бонус урона комбонавыка",
+    "ultimate_dmg_bonus": "Бонус урона ульты",
+    "all_skill_dmg_bonus": "Бонус урона всех навыков",
+    "broken_dmg_bonus": "Бонус урона по цели в состоянии слома",
+    "originium_arts_power": "Сила искусств",
+    "ult_charge_eff": "Скорость накопления суперэнергии",
+    "link_cd_reduction": "КД комбонавыка"
+  },
+  "actionItem": {
+    "tickTooltip": "Время: {time}\nОшеломление: {stagger}\nОН: {sp}",
+    "lockedTitle": "Заблокировано",
+    "disabledTitle": "Отключено"
+  }
+}
