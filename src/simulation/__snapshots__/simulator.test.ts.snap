@@ -1,0 +1,279 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SimulationEngine Integration > should match SP snapshot 1`] = `
+[
+  {
+    "sp": 200,
+    "time": 0,
+  },
+  {
+    "actionId": "inst_hkc1ibd",
+    "sp": 100,
+    "time": 0,
+  },
+  {
+    "sp": 100,
+    "time": 0.5,
+  },
+  {
+    "sp": 121.6,
+    "time": 3.2,
+  },
+  {
+    "actionId": "inst_83xf30r",
+    "sp": 139.6,
+    "time": 3.2,
+  },
+  {
+    "actionId": "inst_6wgpfl3",
+    "sp": 39.599999999999994,
+    "time": 3.2,
+  },
+  {
+    "sp": 39.599999999999994,
+    "time": 3.7,
+  },
+  {
+    "sp": 45.199999999999996,
+    "time": 4.4,
+  },
+  {
+    "sp": 45.199999999999996,
+    "time": 4.9,
+  },
+  {
+    "sp": 70,
+    "time": 8,
+  },
+  {
+    "sp": 70,
+    "time": 8.5,
+  },
+  {
+    "sp": 78.8,
+    "time": 9.6,
+  },
+  {
+    "actionId": "inst_nxhwtu6",
+    "sp": 96.8,
+    "time": 9.6,
+  },
+  {
+    "sp": 126.4,
+    "time": 13.3,
+  },
+  {
+    "actionId": "inst_95ddgxo",
+    "sp": 144.4,
+    "time": 13.3,
+  },
+  {
+    "actionId": "inst_wi5a1dj",
+    "sp": 44.400000000000006,
+    "time": 13.3,
+  },
+  {
+    "sp": 44.400000000000006,
+    "time": 13.8,
+  },
+  {
+    "sp": 70.80000000000001,
+    "time": 17.1,
+  },
+  {
+    "actionId": "inst_9u3lc19",
+    "sp": 88.80000000000001,
+    "time": 17.1,
+  },
+  {
+    "sp": 100,
+    "time": 18.5,
+  },
+  {
+    "sp": 100,
+    "time": 19,
+  },
+  {
+    "sp": 120,
+    "time": 21.5,
+  },
+  {
+    "actionId": "inst_7d7vbcy",
+    "sp": 138,
+    "time": 21.5,
+  },
+  {
+    "sp": 138,
+    "time": 21.8,
+  },
+  {
+    "sp": 138,
+    "time": 22.3,
+  },
+  {
+    "sp": 155.6,
+    "time": 24.5,
+  },
+  {
+    "sp": 155.6,
+    "time": 25,
+  },
+  {
+    "sp": 166.79999999999998,
+    "time": 26.4,
+  },
+  {
+    "actionId": "inst_ai1qx5h",
+    "sp": 191.79999999999998,
+    "time": 26.4,
+  },
+  {
+    "sp": 192.6,
+    "time": 26.5,
+  },
+  {
+    "actionId": "inst_8ka0n5b",
+    "sp": 92.6,
+    "time": 26.5,
+  },
+  {
+    "sp": 92.6,
+    "time": 27,
+  },
+  {
+    "sp": 300,
+    "time": 52.925,
+  },
+  {
+    "sp": 300,
+    "time": 120,
+  },
+]
+`;
+
+exports[`SimulationEngine Integration > should match Stagger snapshot 1`] = `
+{
+  "lockSegments": [
+    {
+      "end": 32.8,
+      "start": 21.5,
+    },
+  ],
+  "nodeSegments": [],
+  "nodeStep": 125,
+  "points": [
+    {
+      "time": 0,
+      "val": 0,
+    },
+    {
+      "time": 1.5,
+      "val": 0,
+    },
+    {
+      "time": 1.5,
+      "val": 10,
+    },
+    {
+      "time": 3.2,
+      "val": 10,
+    },
+    {
+      "time": 3.2,
+      "val": 26,
+    },
+    {
+      "time": 3.6,
+      "val": 26,
+    },
+    {
+      "time": 3.6,
+      "val": 36,
+    },
+    {
+      "time": 4.960000000000001,
+      "val": 36,
+    },
+    {
+      "time": 4.960000000000001,
+      "val": 46,
+    },
+    {
+      "time": 8.8,
+      "val": 46,
+    },
+    {
+      "time": 8.8,
+      "val": 56,
+    },
+    {
+      "time": 9.6,
+      "val": 56,
+    },
+    {
+      "time": 9.6,
+      "val": 72,
+    },
+    {
+      "time": 13.3,
+      "val": 72,
+    },
+    {
+      "time": 13.3,
+      "val": 88,
+    },
+    {
+      "time": 14.3,
+      "val": 88,
+    },
+    {
+      "time": 14.3,
+      "val": 98,
+    },
+    {
+      "time": 17.1,
+      "val": 98,
+    },
+    {
+      "time": 17.1,
+      "val": 114,
+    },
+    {
+      "time": 19.5,
+      "val": 114,
+    },
+    {
+      "time": 19.5,
+      "val": 124,
+    },
+    {
+      "time": 21.5,
+      "val": 124,
+    },
+    {
+      "time": 21.5,
+      "val": 0,
+    },
+    {
+      "time": 22.36,
+      "val": 0,
+    },
+    {
+      "time": 23,
+      "val": 0,
+    },
+    {
+      "time": 25.3,
+      "val": 0,
+    },
+    {
+      "time": 26.9,
+      "val": 0,
+    },
+    {
+      "time": 120,
+      "val": 0,
+    },
+  ],
+}
+`;
