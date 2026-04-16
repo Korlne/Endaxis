@@ -33,5 +33,7 @@ deploy.ps1
 /cypress/videos/
 /cypress/screenshots/
 
+Docs/
+
 # Vitest
 __screenshots__/

@@ -15,6 +15,41 @@ import ResourceMonitor from '../components/ResourceMonitor.vue'
 
 import { addMetadataToPng, readMetadataFromPng } from '../utils/pngUtils.js'
 
+// ====================
+// === zzzaxis 适配 ===
+import { useRouter, useRoute } from 'vue-router'
+
+const router = useRouter()
+const route = useRoute()
+
+// 模式持久化 key
+const MODE_STORAGE_KEY = 'ea_active_mode'
+const currentMode = ref(localStorage.getItem(MODE_STORAGE_KEY) || 'endaxis')
+
+/**
+ * 切换编辑器模式
+ * @param {string} mode - 'endaxis' | 'zzz'
+ */
+const handleModeChange = (mode) => {
+  currentMode.value = mode
+  localStorage.setItem(MODE_STORAGE_KEY, mode)
+  
+  if (mode === 'zzz') {
+    router.push('/zzz/editor')
+  } else {
+    router.push('/editor')
+  }
+}
+
+// 初始化时同步模式状态
+onMounted(() => {
+  if (route.path.includes('/zzz/')) {
+    currentMode.value = 'zzz'
+  }
+})
+// === zzzaxis 适配 ===
+// ====================
+
 const store = useTimelineStore()
 const { t, locale } = useI18n({ useScope: 'global' })
 const { copyShareCode, importFromCode } = useShareProject()
@@ -539,6 +574,15 @@ onUnmounted(() => {
 
         <div class="header-controls">
           <input type="file" ref="fileInputRef" style="display: none" accept=".json,.png" @change="onFileSelected" />
+
+          <!-- === zzzaxis 适配 模式转换按键=== -->
+          <el-radio-group v-model="currentMode" size="small" @change="handleModeChange" class="mode-switcher">
+            <el-radio-button label="endaxis">Endaxis</el-radio-button>
+            <el-radio-button label="zzz">ZZZAxis</el-radio-button>
+          </el-radio-group>
+
+          <div class="divider-vertical"></div>
+          <!-- ============================== -->
 
           <el-dropdown @command="changeLocale" trigger="click" placement="bottom-end">
             <button class="ea-btn ea-btn--sm ea-btn--lift ea-btn--hover-info" type="button" :title="t('timeline.header.languageTooltip')">
