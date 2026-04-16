@@ -1,9 +1,6 @@
 <script setup>
 import { computed } from 'vue'
 import { useTimelineStore } from '../stores/timelineStore.js'
-import { useDragConnection } from '../composables/useDragConnection.js'
-import ActionLinkPorts from './ActionLinkPorts.vue'
-import { getRectPos } from '@/utils/layoutUtils.js'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
@@ -11,7 +8,6 @@ const props = defineProps({
 })
 
 const store = useTimelineStore()
-const connectionHandler = useDragConnection()
 const { t } = useI18n({ useScope: 'global' })
 const TYPE_SHORTHAND = {
   'attack': 'A', 'dodge': 'D', 'execution': 'X', 'skill': 'C', 'link': 'E', 'ultimate': 'U'
@@ -288,7 +284,6 @@ const customBarsToRender = computed(() => {
 
     // 计算起始点的现实偏移
     const shiftedStartTimestamp = store.getShiftedEndTime(props.action.startTime, originalOffset, props.action.instanceId)
-    const shiftedOffset = shiftedStartTimestamp - props.action.startTime
 
     // 计算受时停影响后的结束点，从而得出最终视觉时长
     const shiftedEndTimestamp = store.getShiftedEndTime(shiftedStartTimestamp, originalDuration, props.action.instanceId)
@@ -346,17 +341,6 @@ function hexToRgba(hex, alpha) {
   c = '0x' + c.join('');
   return 'rgba(' + [(c >> 16) & 255, (c >> 8) & 255, c & 255].join(',') + ',' + alpha + ')'
 }
-
-const connectionSourceActionId = computed(() => {
-  const node = store.resolveNode(connectionHandler.state.value.sourceId)
-  if (!node) {
-    return null
-  }
-  if (node.type === 'action') {
-    return node.id
-  }
-  return node.actionId
-})
 
 // 计算判定点的位置样式
 const renderableTicks = computed(() => {
@@ -420,74 +404,14 @@ const renderableAnomalies = computed(() => {
   return resultRows
 })
 
-const showPorts = computed(() => {
-  if (isGhostMode.value) {
-    return false
-  }
-  if (connectionHandler.isDragging.value) {
-    if (store.hoveredActionId === props.action.instanceId && props.action.instanceId !== connectionHandler.state.value.sourceId) {
-      return true
-    }
-    return false
-  } else if (store.hoveredActionId === props.action.instanceId && connectionHandler.toolEnabled.value) {
-    return true
-  }
-  return false
-})
-
-const isActionValidConnectionTarget = computed(() => {
-  return connectionHandler.isNodeValid(props.action.instanceId)
-})
-
 function onIconClick(evt, item, flatIndex) {
   evt.stopPropagation()
   store.selectAnomaly(props.action.instanceId, item.rowIndex, item.colIndex)
-}
-
-function handleConnectionDrop(port) {
-  connectionHandler.endDrag(props.action.instanceId, port)
-}
-
-function handleConnectionSnap(port, snapPos) {
-  if (connectionHandler.isNodeValid(props.action.instanceId)) {
-    connectionHandler.snapTo(props.action.instanceId, port, snapPos);
-  }
-}
-
-function handleActionDragStart(startPos, port) {
-  connectionHandler.newConnectionFrom(startPos, props.action.instanceId, port)
-}
-
-function handleEffectDragStart(event, effectId) {
-  if (!connectionHandler.toolEnabled.value || connectionHandler.isDragging.value) {
-    return
-  }
-  const effectLayout = store.effectLayouts.get(effectId)
-  if (!effectLayout) return
-  const rect = effectLayout.rect
-  const timelinePoint = getRectPos(rect, 'right')
-  connectionHandler.newConnectionFrom(timelinePoint, effectId, 'right')
-}
-
-function handleEffectSnap(event, effectId) {
-  if (!connectionHandler.isNodeValid(effectId)) {
-    return
-  }
-  const effectLayout = store.effectLayouts.get(effectId)
-  if (!effectLayout) return
-  const rect = effectLayout.rect
-  const timelinePoint = getRectPos(rect, 'left')
-  connectionHandler.snapTo(effectId, 'left', timelinePoint)
-}
-
-function handleEffectDrop(effectId) {
-  connectionHandler.endDrag(effectId, 'left')
 }
 </script>
 
 <template>
   <div :id="`action-${action.instanceId}`" ref="actionElRef" class="action-item-wrapper" :data-id="action.instanceId"
-       :class="{ 'is-link-target-invalid': !isActionValidConnectionTarget && connectionSourceActionId !== action.instanceId }"
        @mouseenter="store.setHoveredAction(action.instanceId)"
        @mouseleave="store.setHoveredAction(null)"
        :style="style"
@@ -570,7 +494,7 @@ function handleEffectDrop(effectId) {
       <div class="ultimate-side-bar right-bar" :style="{ backgroundColor: themeColor }"></div>
     </template>
 
-    <div v-if="!isGhostMode" class="action-item-content drag-handle" :class="{ 'is-link-target-invalid': !isActionValidConnectionTarget && connectionSourceActionId !== action.instanceId }">
+    <div v-if="!isGhostMode" class="action-item-content drag-handle">
       {{ displayLabel }}
       <div v-if="animationTimeWidth > 0"
            class="animation-phase-overlay"
@@ -579,26 +503,12 @@ function handleEffectDrop(effectId) {
       </div>
     </div>
 
-    <ActionLinkPorts @drop="handleConnectionDrop" @snap="handleConnectionSnap"
-                     @drag-start="handleActionDragStart" @clear-snap="connectionHandler.clearSnap"
-                     :isDragging="connectionHandler.isDragging.value"
-                     :disabled="!isActionValidConnectionTarget"
-                     :canStart="connectionHandler.toolEnabled.value"
-                     :rect="store.nodeRects[action.instanceId]?.rect"
-                     v-if="showPorts"
-                     :color="themeColor" />
-
     <div v-if="!isGhostMode" class="anomalies-overlay">
       <div v-for="(item, index) in renderableAnomalies" :key="`${item.rowIndex}-${item.colIndex}`"
            class="anomaly-wrapper" :style="item.style" :data-id="item.effectId">
 
         <div :id="item.effectId"
              class="anomaly-icon-box"
-             :class="{ 'is-linking': connectionHandler.isDragging.value, 'is-link-target-valid': connectionHandler.isNodeValid(item.data._id) }"
-             @mousedown.stop="handleEffectDragStart($event, item.data._id)"
-             @mouseover.stop="handleEffectSnap($event, item.data._id)"
-             @mouseup.stop="handleEffectDrop(item.data._id)"
-             @mouseleave="connectionHandler.clearSnap()"
              @click.stop="onIconClick($event, item, index)">
 
           <img :src="getIconPath(item.data.type)" class="anomaly-icon" />
@@ -654,19 +564,7 @@ function handleEffectDrop(effectId) {
   transition: transform 0.1s, border-color 0.1s, box-shadow 0.2s;
 }
 .anomaly-icon-box:hover { border-color: #ffd700; transform: scale(1.2); z-index: 20; }
-.anomaly-icon-box.is-linking {
-  opacity: 0.5;
-  pointer-events: none;
-}
-.anomaly-icon-box.is-linking.is-link-target-valid {
-  opacity: 1;
-  pointer-events: auto;
-  border-color: #fff; box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
-  transform: scale(1.1); animation: pulse-target 1s infinite; z-index: 100;
-}
-@keyframes pulse-target {
-  0% { box-shadow: 0 0 0 rgba(255,255,255,0.4); } 70% { box-shadow: 0 0 10px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 rgba(255,255,255,0); }
-}
+
 .anomaly-icon { width: 100%; height: 100%; object-fit: cover; }
 .anomaly-stacks {
   position: absolute; bottom: -2px; right: -2px; background: rgba(0, 0, 0, 0.8);
@@ -686,12 +584,6 @@ function handleEffectDrop(effectId) {
 }
 .mute-icon {
   right: 2px;
-}
-
-.action-item-content {
-  &.is-link-target-invalid {
-    opacity: 0.5;
-  }
 }
 
 /* 伤害节点样式 */

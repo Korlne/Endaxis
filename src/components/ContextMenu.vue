@@ -7,13 +7,14 @@ import { useI18n } from 'vue-i18n'
 const store = useTimelineStore()
 const { t } = useI18n({ useScope: 'global' })
 
+// 使用可选链修复 undefined 崩溃
 const menuStyle = computed(() => ({
-  left: `${store.contextMenu.x}px`,
-  top: `${store.contextMenu.y}px`
+  left: `${store.contextMenu?.x || 0}px`,
+  top: `${store.contextMenu?.y || 0}px`
 }))
 
 const targetAction = computed(() => {
-  if (!store.contextMenu.targetId) return null
+  if (!store.contextMenu?.targetId) return null
   const info = store.getActionById(store.contextMenu.targetId)
   return info ? info.node : null
 })
@@ -37,8 +38,8 @@ onUnmounted(() => window.removeEventListener('click', onGlobalClick))
 // ===================================================================================
 
 function handleCopy() {
-  if (!store.isActionSelected(store.contextMenu.targetId)) {
-    store.selectAction(store.contextMenu.targetId)
+  if (!store.isActionSelected(store.contextMenu?.targetId)) {
+    store.selectAction(store.contextMenu?.targetId)
   }
   store.copySelection()
   ElMessage.success({ message: t('timeline.shortcut.copied'), duration: 800 })
@@ -46,14 +47,15 @@ function handleCopy() {
 }
 
 function handlePaste() {
-  store.pasteSelection(store.contextMenu.time)
+  store.pasteSelection(store.contextMenu?.time)
   ElMessage.success({ message: t('timeline.shortcut.pasted'), duration: 800 })
   close()
 }
 
 function handleDelete() {
-  if (!store.selectedConnectionId && !store.isActionSelected(store.contextMenu.targetId)) {
-    store.selectAction(store.contextMenu.targetId)
+  // 移除对 store.selectedConnectionId 的依赖
+  if (!store.isActionSelected(store.contextMenu?.targetId)) {
+    store.selectAction(store.contextMenu?.targetId)
   }
   const result = store.removeCurrentSelection()
   if (result && result.total > 0) {
@@ -63,64 +65,38 @@ function handleDelete() {
 }
 
 function handleLock() {
-  store.toggleActionLock(store.contextMenu.targetId)
+  store.toggleActionLock(store.contextMenu?.targetId)
   close()
 }
 
 function handleMute() {
-  store.toggleActionDisable(store.contextMenu.targetId)
+  store.toggleActionDisable(store.contextMenu?.targetId)
   close()
 }
 
 const PRESET_COLORS = computed(() => [
   { val: null, label: t('common.default') },
-  { val: store.ELEMENT_COLORS.physical, label: t('timelineGrid.elementFilter.physical') },
-  { val: store.ELEMENT_COLORS.blaze, label: t('timelineGrid.elementFilter.blaze') },
-  { val: store.ELEMENT_COLORS.cold, label: t('timelineGrid.elementFilter.cold') },
-  { val: store.ELEMENT_COLORS.emag, label: t('timelineGrid.elementFilter.emag') },
-  { val: store.ELEMENT_COLORS.nature, label: t('timelineGrid.elementFilter.nature') },
+  { val: store.ELEMENT_COLORS?.physical, label: t('timelineGrid.elementFilter.physical') },
+  { val: store.ELEMENT_COLORS?.blaze, label: t('timelineGrid.elementFilter.blaze') },
+  { val: store.ELEMENT_COLORS?.cold, label: t('timelineGrid.elementFilter.cold') },
+  { val: store.ELEMENT_COLORS?.emag, label: t('timelineGrid.elementFilter.emag') },
+  { val: store.ELEMENT_COLORS?.nature, label: t('timelineGrid.elementFilter.nature') },
 ])
 
 function handleColor(color) {
-  store.setActionColor(store.contextMenu.targetId, color)
+  store.setActionColor(store.contextMenu?.targetId, color)
   close()
 }
 
-const targetConnection = computed(() => {
-  if (!store.contextMenu.targetId) return null
-  return store.connections.find(c => c.id === store.contextMenu.targetId)
-})
-
-const BASE_ARROW_PATH = 'M12 21 L12 3 M12 3 L5 10 M12 3 L19 10'
-
-const DIRECTION_OPTS = computed(() => [
-  { val: 'top-left', label: t('connection.portPosition.topLeft'), rotate: -45 },
-  { val: 'top', label: t('connection.portPosition.top'), rotate: 0 },
-  { val: 'top-right', label: t('connection.portPosition.topRight'), rotate: 45 },
-  { val: 'left', label: t('connection.portPosition.left'), rotate: -90 },
-  { val: null, label: t('connection.portPosition.center'), isSpacer: true },
-  { val: 'right', label: t('connection.portPosition.right'), rotate: 90 },
-  { val: 'bottom-left', label: t('connection.portPosition.bottomLeft'), rotate: -135 },
-  { val: 'bottom', label: t('connection.portPosition.bottom'), rotate: 180 },
-  { val: 'bottom-right', label: t('connection.portPosition.bottomRight'), rotate: 135 },
-])
-
-function handleSetPort(type, direction) {
-  if (targetConnection.value && direction) {
-    store.updateConnectionPort(targetConnection.value.id, type, direction)
-    close()
-  }
-}
-
 function handleAddCycleBoundary() {
-  store.addCycleBoundary(store.contextMenu.time)
+  store.addCycleBoundary(store.contextMenu?.time)
   close()
 }
 
 </script>
 
 <template>
-  <div v-if="store.contextMenu.visible"
+  <div v-if="store.contextMenu?.visible"
        class="custom-context-menu"
        :style="menuStyle"
        @click.stop
@@ -199,70 +175,6 @@ function handleAddCycleBoundary() {
       </div>
     </template>
 
-    <template v-else-if="targetConnection">
-      <div class="menu-header">{{ t('contextMenu.connectionSettings') }}</div>
-
-      <div class="menu-item has-submenu">
-        <span class="icon">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 9V5 M12 15V19 M9 12H5 M15 12H19"/></svg>
-        </span>
-        <span class="label">{{ t('contextMenu.setSourcePort') }}</span>
-        <span class="arrow">▶</span>
-
-        <div class="submenu-grid">
-          <div v-for="(opt, i) in DIRECTION_OPTS" :key="i"
-               class="grid-item"
-               :class="{
-                 'is-active': (targetConnection.sourcePort || 'right') === opt.val,
-                 'spacer': opt.isSpacer
-               }"
-               @click="!opt.isSpacer && handleSetPort('source', opt.val)"
-               :title="opt.label">
-            <svg v-if="!opt.isSpacer"
-                 viewBox="0 0 24 24" width="16" height="16"
-                 fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round"
-                 :style="{ transform: `rotate(${opt.rotate}deg)` }"> <path :d="BASE_ARROW_PATH" />
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      <div class="menu-item has-submenu">
-        <span class="icon">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M12 12h.01"/></svg>
-        </span>
-        <span class="label">{{ t('contextMenu.setTargetPort') }}</span>
-        <span class="arrow">▶</span>
-
-        <div class="submenu-grid">
-          <div v-for="(opt, i) in DIRECTION_OPTS" :key="i"
-               class="grid-item"
-               :class="{
-                 'is-active': (targetConnection.targetPort || 'left') === opt.val,
-                 'spacer': opt.isSpacer
-               }"
-               @click="!opt.isSpacer && handleSetPort('target', opt.val)"
-               :title="opt.label">
-            <svg v-if="!opt.isSpacer"
-                 viewBox="0 0 24 24" width="16" height="16"
-                 fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round"
-                 :style="{ transform: `rotate(${opt.rotate}deg)` }">
-              <path :d="BASE_ARROW_PATH" />
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      <div class="divider"></div>
-      <div class="menu-item delete-item" @click="handleDelete">
-        <span class="icon"><svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></span>
-        <span class="label">{{ t('common.delete') }}</span>
-        <span class="shortcut-hint">Delete</span>
-      </div>
-    </template>
-
     <template v-else>
       <div class="menu-header">{{ t('contextMenu.globalOps') }}</div>
 
@@ -295,11 +207,11 @@ function handleAddCycleBoundary() {
         <span class="arrow">▶</span>
 
         <div class="submenu-list">
-          <div v-for="track in store.teamTracksInfo"
+          <div v-for="track in (store.teamTracksInfo || [])"
                v-show="track.id"
                :key="track.id"
                class="submenu-list-item"
-               @click="store.addSwitchEvent(store.contextMenu.time, track.id); close()">
+               @click="store.addSwitchEvent(store.contextMenu?.time, track.id); close()">
             <img :src="track.avatar" class="mini-avatar" />
             <span class="sub-label">{{ track.name }}</span>
           </div>
@@ -414,50 +326,9 @@ function handleAddCycleBoundary() {
   margin-left: 10px;
 }
 
-.menu-item.has-submenu:hover .submenu-grid,
-.menu-item.has-submenu:hover .submenu-list {
-  display: grid;
-}
-
 .menu-item.has-submenu:hover .submenu-list {
   display: flex;
   flex-direction: column;
-}
-
-.submenu-grid {
-  display: none;
-  position: absolute;
-  left: 100%;
-  top: -4px;
-  background: #2b2b2b;
-  border: 1px solid #444;
-  border-radius: 6px;
-  box-shadow: 4px 4px 12px rgba(0,0,0,0.5);
-  padding: 4px;
-  grid-template-columns: repeat(3, 30px);
-  grid-template-rows: repeat(3, 30px);
-  gap: 2px;
-  z-index: 100;
-}
-
-.grid-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  cursor: pointer;
-  color: #888;
-  transition: all 0.1s;
-}
-
-.grid-item:hover {
-  background: #444;
-  color: #fff;
-}
-
-.grid-item.is-active {
-  background: #ffd700;
-  color: #000;
 }
 
 .submenu-list {
@@ -533,10 +404,5 @@ function handleAddCycleBoundary() {
 @keyframes fadeIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
-}
-
-.spacer {
-  cursor: default;
-  pointer-events: none;
 }
 </style>

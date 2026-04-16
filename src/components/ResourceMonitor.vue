@@ -9,10 +9,6 @@ import { useI18n } from 'vue-i18n'
 const store = useTimelineStore()
 const { t } = useI18n({ useScope: 'global' })
 
-const { enemyDatabase, enemyCategories } = storeToRefs(store)
-const ENEMY_TIERS = store.ENEMY_TIERS
-const TIER_WEIGHTS = { 'boss': 5, 'head': 4, 'champion': 3, 'elite': 2, 'normal': 1 }
-
 // === 布局常量 ===
 const TOTAL_HEIGHT = 200
 const STAGGER_HEIGHT = 60
@@ -35,88 +31,20 @@ const COLOR_LIMIT = '#d32f2f'
 const COLOR_SP_MAIN = '#ffd700'
 const COLOR_SP_WARN = '#ff4d4f'
 
-// === 敌人选择器逻辑 ===
+// === 敌人选择器逻辑 (存根隔离) ===
 const CATEGORY_ALL = '__ALL__'
-const CATEGORY_UNCATEGORIZED = '__UNCAT__'
 const isEnemySelectorVisible = ref(false)
 const enemySearchQuery = ref('')
 const activeCategoryTab = ref(CATEGORY_ALL)
-
-const activeEnemyInfo = computed(() => {
-  if (store.activeEnemyId === 'custom') {
-    return { name: t('resourceMonitor.enemy.custom'), avatar: '', isCustom: true }
-  }
-  return store.enemyDatabase.find(e => e.id === store.activeEnemyId) || { name: t('resourceMonitor.enemy.unknown'), avatar: '' }
-})
-
-const groupedEnemyList = computed(() => {
-  let list = enemyDatabase.value || []
-
-  if (enemySearchQuery.value) {
-    const q = enemySearchQuery.value.toLowerCase()
-    list = list.filter(e => e.name.toLowerCase().includes(q))
-  }
-
-  const groups = {}
-
-  const targetCategories = (activeCategoryTab.value === CATEGORY_ALL)
-      ? [...enemyCategories.value, CATEGORY_UNCATEGORIZED]
-      : [activeCategoryTab.value]
-
-  targetCategories.forEach(cat => { groups[cat] = [] })
-
-  list.forEach(enemy => {
-    let cat = enemy.category
-    if (!cat || !enemyCategories.value.includes(cat)) {
-      cat = CATEGORY_UNCATEGORIZED
-    }
-
-    if (groups[cat]) {
-      groups[cat].push(enemy)
-    }
-  })
-
-  const result = []
-
-  targetCategories.forEach(cat => {
-    const enemyList = groups[cat]
-    if (enemyList && enemyList.length > 0) {
-      enemyList.sort((a, b) => (TIER_WEIGHTS[b.tier] || 0) - (TIER_WEIGHTS[a.tier] || 0))
-      result.push({
-        id: cat,
-        name: cat === CATEGORY_UNCATEGORIZED ? t('common.uncategorized') : cat,
-        list: enemyList
-      })
-    }
-  })
-
-  return result
-})
-
-function getTierColor(tierValue) {
-  const tier = ENEMY_TIERS.find(t => t.value === tierValue)
-  return tier ? tier.color : '#a0a0a0'
-}
-
-function getTierLabel(tierValue) {
-  const tier = ENEMY_TIERS.find(t => t.value === tierValue)
-  if (!tier) return ''
-  if (tier.labelKey) return t(tier.labelKey)
-  return tier.label || ''
-}
-
-function selectEnemy(id) {
-  store.applyEnemyPreset(id)
-  isEnemySelectorVisible.value = false
-}
+const activeEnemyInfo = computed(() => ({ name: t('resourceMonitor.enemy.unknown'), avatar: '', isCustom: true }))
+const groupedEnemyList = computed(() => [])
+function getTierColor(tier) { return '#a0a0a0' }
+function getTierLabel(tier) { return '' }
+function selectEnemy(id) { isEnemySelectorVisible.value = false }
 
 // === 数据计算 (失衡)===
-const staggerResult = computed(() => {
-  if (store.useNewCompiler) {
-    return store.staggerSeries
-  }
-  return store.calculateGlobalStaggerData()
-})
+const staggerResult = computed(() => ({ points: [], lockSegments: [], nodeSegments: [] }))
+
 const staggerPoints = computed(() => staggerResult.value.points || [])
 const lockSegments = computed(() => staggerResult.value.lockSegments || [])
 const nodeSegments = computed(() => staggerResult.value.nodeSegments || [])
@@ -159,12 +87,7 @@ const lockZones = computed(() => lockSegments.value.map(seg => ({
 
 
 // === 数据计算 (技力) ===
-const spData = computed(() => {
-  if (store.useNewCompiler) {
-    return store.spSeries
-  }
-  return store.calculateGlobalSpData()
-})
+const spData = computed(() => ([]))
 
 // 技力绘图坐标计算
 const BASE_Y_SP = STAGGER_HEIGHT + SP_HEIGHT - 20

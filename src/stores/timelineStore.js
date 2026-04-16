@@ -1,8 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { watchThrottled } from '@vueuse/core'
 import { executeFetch } from '@/api/fetchStrategy.js'
-import { compressGzip, decompressGzip } from '@/utils/gzipUtils'
 import { CORE_STATS, createDefaultStats } from '@/utils/coreStats.js'
 import { i18n } from '@/i18n'
 import { snapMs } from '@/utils/precision.js'
@@ -18,7 +16,6 @@ const uid = () => Math.random().toString(36).substring(2, 9)
 const ATTACK_SEGMENT_COUNT = 5
 const COLLAPSED_PREP_PX = 18
 const MIN_PREP_DURATION = 0.5
-const EQUIPMENT_REFINE_MAX_TIER = 3
 
 const createOwnSkillLinkEnhancer = ({ linkSubtract = 0.0 } = {}) => {
     return ({ track, enhStart, baseDuration, ultimateAction, getShiftedEndTime }) => {
@@ -84,10 +81,6 @@ function shiftSnapshotTimes(snapshot, delta) {
             if (!track || !Array.isArray(track.actions)) return
             track.actions.forEach(shiftStartLike)
         })
-    }
-
-    if (Array.isArray(snapshot.weaponStatuses)) {
-        snapshot.weaponStatuses.forEach(shiftStartLike)
     }
 
     if (Array.isArray(snapshot.cycleBoundaries)) {
@@ -180,25 +173,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     }
 
     const systemConstants = ref({ ...DEFAULT_SYSTEM_CONSTANTS })
-    const customEnemyParams = ref({
-        maxStagger: 100,
-        staggerNodeCount: 0,
-        staggerNodeDuration: 2,
-        staggerBreakDuration: 10,
-        executionRecovery: 25
-    })
-
-    watch(systemConstants, (newVal) => {
-        if (activeEnemyId.value === 'custom') {
-            customEnemyParams.value = {
-                maxStagger: newVal.maxStagger,
-                staggerNodeCount: newVal.staggerNodeCount,
-                staggerNodeDuration: newVal.staggerNodeDuration,
-                staggerBreakDuration: newVal.staggerBreakDuration,
-                executionRecovery: newVal.executionRecovery
-            }
-        }
-    }, { deep: true })
 
     const BASE_BLOCK_WIDTH = ref(50)
     const ZOOM_LIMITS = {
@@ -210,6 +184,13 @@ export const useTimelineStore = defineStore('timeline', () => {
 
     const prepDuration = ref(5)
     const prepExpanded = ref(true)
+
+    const isLoading = ref(true)
+    const characterRoster = ref([])
+    const iconDatabase = ref({})
+    const cycleBoundaries = ref([])
+
+    const activeScenarioId = ref('default_sc')
 
     const viewDuration = computed(() => (Number(prepDuration.value) || 0) + TOTAL_DURATION)
     const prepZoneWidthPx = computed(() => {
@@ -276,43 +257,9 @@ export const useTimelineStore = defineStore('timeline', () => {
         { labelKey: 'enemyTier.boss', label: '领袖', value: 'boss', color: '#ff4d4f' }
     ]
 
-    const isLoading = ref(true)
-    const characterRoster = ref([])
-    const iconDatabase = ref({})
-    const enemyDatabase = ref([])
-    const weaponDatabase = ref([])
-    const equipmentDatabase = ref([])
-    const equipmentCategories = ref([])
-    const equipmentCategoryConfigs = ref({})
-    const misc = ref({
-        modifierDefs: [],
-        weaponCommonModifiers: {},
-        equipmentTemplates: {
-            armor: { primary1: [0, 0, 0, 0], primary2: [0, 0, 0, 0], primary1Single: [0, 0, 0, 0] },
-            gloves: { primary1: [0, 0, 0, 0], primary2: [0, 0, 0, 0], primary1Single: [0, 0, 0, 0] },
-            accessory: { primary1: [0, 0, 0, 0], primary2: [0, 0, 0, 0], primary1Single: [0, 0, 0, 0] },
-        },
-        equipmentAdapterTable: {},
-        domainConfig: {}
-    })
-    const activeEnemyId = ref('custom')
-    const enemyCategories = ref([])
-    const cycleBoundaries = ref([])
-
-    const activeScenarioId = ref('default_sc')
     const scenarioList = ref([
         { id: 'default_sc', name: tr('timeline.scenario.defaultName', { index: 1 }), data: null }
     ])
-
-    watchThrottled([weaponDatabase, misc], () => {
-        if (isLoading.value) return
-        syncAllWeaponModifiers()
-    }, { deep: true, throttle: 600 })
-
-    watchThrottled([equipmentDatabase], () => {
-        if (isLoading.value) return
-        syncAllEquipmentModifiers()
-    }, { deep: true, throttle: 80 })
 
     const createEmptyTrack = () => ({
         id: null,
@@ -321,21 +268,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         maxGaugeOverride: null,
         gaugeEfficiency: 100,
         originiumArtsPower: 0,
-        weaponId: null,
-        weaponCommon1Tier: 1,
-        weaponCommon2Tier: 1,
-        weaponBuffTier: 1,
-        weaponAppliedDeltas: {},
-        equipmentAppliedDeltas: {},
         stats: createDefaultStats(),
-        equipArmorId: null,
-        equipGlovesId: null,
-        equipAccessory1Id: null,
-        equipAccessory2Id: null,
-        equipArmorRefineTier: 0,
-        equipGlovesRefineTier: 0,
-        equipAccessory1RefineTier: 0,
-        equipAccessory2RefineTier: 0,
         linkCdReduction: 0,
     })
 
@@ -349,9 +282,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     const tracks = ref(createDefaultTracks())
     const connections = ref([])
     const characterOverrides = ref({})
-    const weaponOverrides = ref({})
-    const equipmentCategoryOverrides = ref({})
-    const weaponStatuses = ref([])
 
     const connectionMap = computed(() => {
         const map = new Map()
@@ -406,22 +336,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         return map
     })
 
-    const statusMap = computed(() => {
-        const map = new Map()
-        for (const status of weaponStatuses.value) {
-            if (!status?.id) continue
-            const trackIndex = tracks.value.findIndex(t => t?.id && t.id === status.trackId)
-            map.set(status.id, {
-                id: status.id,
-                node: status,
-                trackId: status.trackId,
-                trackIndex,
-                type: 'status'
-            })
-        }
-        return map
-    })
-
     function setBaseBlockWidth(val) {
         const sanitizedVal = Math.min(ZOOM_LIMITS.MAX, Math.max(ZOOM_LIMITS.MIN, val))
         BASE_BLOCK_WIDTH.value = sanitizedVal
@@ -439,12 +353,8 @@ export const useTimelineStore = defineStore('timeline', () => {
         return effectsMap.value.get(effectId)
     }
 
-    function getStatusById(statusId) {
-        return statusMap.value.get(statusId)
-    }
-
     function resolveNode(nodeId) {
-        return getActionById(nodeId) || getEffectById(nodeId) || getStatusById(nodeId)
+        return getActionById(nodeId) || getEffectById(nodeId)
     }
 
     function getNodesOfConnection(connectionId) {
@@ -555,64 +465,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         }
     }
 
-    function updateTrackWeapon(trackId, weaponId) {
-        const track = tracks.value.find(t => t.id === trackId);
-        if (track) {
-            track.weaponId = weaponId || null;
-            if (selectedLibrarySource.value === 'weapon') {
-                selectedLibrarySkillId.value = null;
-                selectedLibrarySource.value = 'character';
-            }
-            weaponStatuses.value = weaponStatuses.value.filter(s => !(s.trackId === track.id && (!s.type || s.type === 'weapon')));
-            pruneDanglingConnections()
-            syncTrackWeaponModifiers(trackId)
-            commitState();
-        }
-    }
-
-    function updateTrackWeaponTier(trackId, part, tier) {
-        const track = tracks.value.find(t => t.id === trackId)
-        if (!track) return
-        const nextTier = clampTier9(tier)
-        if (part === 'common1') track.weaponCommon1Tier = nextTier
-        else if (part === 'common2') track.weaponCommon2Tier = nextTier
-        else if (part === 'buff') track.weaponBuffTier = nextTier
-        else return
-        syncTrackWeaponModifiers(trackId)
-        commitState()
-    }
-
-    function updateTrackEquipment(trackId, slotKey, equipmentId) {
-        const track = tracks.value.find(t => t.id === trackId);
-        if (!track) return;
-        const normalizedId = equipmentId || null
-        if (slotKey === 'armor') track.equipArmorId = normalizedId
-        else if (slotKey === 'gloves') track.equipGlovesId = normalizedId
-        else if (slotKey === 'accessory1') track.equipAccessory1Id = normalizedId
-        else if (slotKey === 'accessory2') track.equipAccessory2Id = normalizedId
-        const eq = getEquipmentById(normalizedId)
-        if (!eq || Number(eq.level) !== 70) {
-            updateTrackEquipmentTier(trackId, slotKey, 0, { commit: false })
-        }
-        syncTrackEquipmentModifiers(trackId)
-        commitState()
-    }
-
-    function updateTrackEquipmentTier(trackId, slotKey, tier, { commit = true } = {}) {
-        const track = tracks.value.find(t => t.id === trackId)
-        if (!track) return
-        const next = clampEquipmentRefineTier(tier)
-        const eq = getEquipmentById(getEquipmentIdForSlot(track, slotKey))
-        const enforced = (eq && Number(eq.level) === 70) ? next : 0
-        if (slotKey === 'armor') track.equipArmorRefineTier = enforced
-        else if (slotKey === 'gloves') track.equipGlovesRefineTier = enforced
-        else if (slotKey === 'accessory1') track.equipAccessory1RefineTier = enforced
-        else if (slotKey === 'accessory2') track.equipAccessory2RefineTier = enforced
-        else return
-        syncTrackEquipmentModifiers(trackId)
-        if (commit) commitState()
-    }
-
     const activeTrackId = ref(null)
     const timelineScrollTop = ref(0)
     const timelineShift = ref(0)
@@ -627,7 +479,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     const selectedLibrarySkillId = ref(null)
     const selectedLibrarySource = ref('character')
     const selectedAnomalyId = ref(null)
-    const selectedWeaponStatusId = ref(null)
     const selectedCycleBoundaryId = ref(null)
     const switchEvents = ref([])
     const selectedSwitchEventId = ref(null)
@@ -658,10 +509,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         const snapshot = JSON.stringify({
             tracks: tracks.value,
             connections: connections.value,
-            characterOverrides: characterOverrides.value,
-            weaponOverrides: weaponOverrides.value,
-            equipmentCategoryOverrides: equipmentCategoryOverrides.value,
-            weaponStatuses: weaponStatuses.value,
             prepDuration: prepDuration.value,
             prepExpanded: prepExpanded.value,
             cycleBoundaries: cycleBoundaries.value,
@@ -694,10 +541,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         }
         tracks.value = normalizeTracks(snapshot.tracks)
         connections.value = normalizeConnections(snapshot.connections)
-        characterOverrides.value = snapshot.characterOverrides
-        weaponOverrides.value = snapshot.weaponOverrides || {}
-        equipmentCategoryOverrides.value = snapshot.equipmentCategoryOverrides || {}
-        weaponStatuses.value = snapshot.weaponStatuses || []
         if (snapshot.prepDuration !== undefined) prepDuration.value = Math.max(MIN_PREP_DURATION, Number(snapshot.prepDuration) || 0)
         if (snapshot.prepExpanded !== undefined) prepExpanded.value = snapshot.prepExpanded !== false
         cycleBoundaries.value = snapshot.cycleBoundaries || []
@@ -709,15 +552,9 @@ export const useTimelineStore = defineStore('timeline', () => {
         return JSON.parse(JSON.stringify({
             tracks: tracks.value,
             connections: connections.value,
-            characterOverrides: characterOverrides.value,
-            weaponOverrides: weaponOverrides.value,
-            equipmentCategoryOverrides: equipmentCategoryOverrides.value,
-            weaponStatuses: weaponStatuses.value,
             prepDuration: prepDuration.value,
             prepExpanded: prepExpanded.value,
             systemConstants: systemConstants.value,
-            activeEnemyId: activeEnemyId.value,
-            customEnemyParams: customEnemyParams.value,
             cycleBoundaries: cycleBoundaries.value,
             switchEvents: switchEvents.value
         }))
@@ -730,19 +567,11 @@ export const useTimelineStore = defineStore('timeline', () => {
         tracks.value = normalizeTracks(incoming.tracks || createDefaultTracks())
         connections.value = normalizeConnections(JSON.parse(JSON.stringify(incoming.connections || [])))
         normalizeComboLinksInTracks()
-        characterOverrides.value = JSON.parse(JSON.stringify(incoming.characterOverrides || {}))
-        weaponOverrides.value = JSON.parse(JSON.stringify(incoming.weaponOverrides || {}))
-        equipmentCategoryOverrides.value = JSON.parse(JSON.stringify(incoming.equipmentCategoryOverrides || {}))
-        weaponStatuses.value = JSON.parse(JSON.stringify(incoming.weaponStatuses || []))
         prepDuration.value = Math.max(MIN_PREP_DURATION, Number(incoming.prepDuration) || 0)
         prepExpanded.value = incoming.prepExpanded !== false
         if (incoming.systemConstants) systemConstants.value = { ...systemConstants.value, ...incoming.systemConstants }
-        activeEnemyId.value = incoming.activeEnemyId || 'custom'
-        if (incoming.customEnemyParams) customEnemyParams.value = { ...customEnemyParams.value, ...incoming.customEnemyParams }
         cycleBoundaries.value = incoming.cycleBoundaries ? JSON.parse(JSON.stringify(incoming.cycleBoundaries)) : []
         switchEvents.value = incoming.switchEvents ? JSON.parse(JSON.stringify(incoming.switchEvents)) : []
-        syncAllWeaponModifiers()
-        syncAllEquipmentModifiers()
         clearSelection()
     }
 
@@ -792,10 +621,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         const emptySnapshot = {
             tracks: createDefaultTracks(),
             connections: [],
-            characterOverrides: {},
-            weaponOverrides: {},
-            equipmentCategoryOverrides: {},
-            weaponStatuses: [],
             prepDuration: 5,
             prepExpanded: true,
             systemConstants: { ...DEFAULT_SYSTEM_CONSTANTS }
@@ -837,30 +662,12 @@ export const useTimelineStore = defineStore('timeline', () => {
         return effect._id
     }
     const clampPercent = (val) => Math.min(100, Math.max(0, Number(val) || 0))
-    const clampTier9 = (val) => {
-        const num = Math.round(Number(val)); return Number.isFinite(num) ? Math.min(9, Math.max(1, num)) : 1
-    }
-    const clampEquipmentRefineTier = (val) => {
-        const num = Math.round(Number(val)); return Number.isFinite(num) ? Math.min(EQUIPMENT_REFINE_MAX_TIER, Math.max(0, num)) : 0
-    }
-    const normalizeArray4 = (arr) => {
-        const list = Array.isArray(arr) ? arr.slice(0, 4) : []; while (list.length < 4) list.push(0); return list.map(v => Number(v) || 0)
-    }
-    const normalizeArray9 = (arr) => {
-        const list = Array.isArray(arr) ? arr.slice(0, 9) : []; while (list.length < 9) list.push(0); return list.map(v => Number(v) || 0)
-    }
 
     const normalizeTrack = (track) => {
         if (!track) return createEmptyTrack()
         const merged = { ...createEmptyTrack(), ...track, actions: track.actions || [] }
         const hasIncomingStats = track.stats && typeof track.stats === 'object'
         merged.stats = { ...createDefaultStats(), ...(hasIncomingStats ? track.stats : {}) }
-        if (!merged.weaponAppliedDeltas || typeof merged.weaponAppliedDeltas !== 'object') merged.weaponAppliedDeltas = {}
-        if (!merged.equipmentAppliedDeltas || typeof merged.equipmentAppliedDeltas !== 'object') merged.equipmentAppliedDeltas = {}
-        merged.equipArmorRefineTier = clampEquipmentRefineTier(merged.equipArmorRefineTier)
-        merged.equipGlovesRefineTier = clampEquipmentRefineTier(merged.equipGlovesRefineTier)
-        merged.equipAccessory1RefineTier = clampEquipmentRefineTier(merged.equipAccessory1RefineTier)
-        merged.equipAccessory2RefineTier = clampEquipmentRefineTier(merged.equipAccessory2RefineTier)
         if (!hasIncomingStats) {
             merged.stats.ult_charge_eff = Number(track.gaugeEfficiency) || 0
             merged.stats.link_cd_reduction = Number(track.linkCdReduction) || 0
@@ -877,7 +684,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         const charInfo = characterRoster.value.find(c => c.id === characterId)
         return charInfo?.element ? (ELEMENT_COLORS[charInfo.element] || ELEMENT_COLORS.default) : ELEMENT_COLORS.default
     }
-    const getWeaponById = (weaponId) => weaponDatabase.value.find(w => w.id === weaponId)
     const getModifierLabel = (modifierId) => {
         const found = (misc.value?.modifierDefs || []).find(d => d.id === modifierId)
         if (found?.label) return found.label
@@ -885,139 +691,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         return (core?.labelKey && tr(core.labelKey) !== core.labelKey) ? tr(core.labelKey) : (core?.label || modifierId || '')
     }
 
-    const normalizeWeaponCommonSlots = (slots) => {
-        const list = Array.isArray(slots) ? slots.slice(0, 2) : []; while (list.length < 2) list.push({})
-        return list.map(s => ({
-            modifierId: (typeof s?.modifierId === 'string' && s.modifierId.trim()) ? s.modifierId.trim() : (typeof s?.key === 'string' && s.key.trim() ? s.key.trim() : null),
-            size: ['large', 'medium', 'small'].includes(s?.size) ? s.size : 'small'
-        }))
-    }
-    const normalizeWeaponBuffBonuses = (bonuses) => {
-        if (!Array.isArray(bonuses)) return []
-        return bonuses.map(b => ({
-            modifierId: (typeof b?.modifierId === 'string' && b.modifierId.trim()) ? b.modifierId.trim() : (typeof b?.key === 'string' && b.key.trim() ? b.key.trim() : null),
-            values: normalizeArray9(b?.values)
-        })).filter(b => b.modifierId)
-    }
-
-    const computeWeaponDeltasForTrack = (track) => {
-        const deltas = {}
-        if (!track?.weaponId) return deltas
-        const weapon = getWeaponById(track.weaponId)
-        if (!weapon) return deltas
-        const slots = normalizeWeaponCommonSlots(weapon.commonSlots)
-        const table = misc.value?.weaponCommonModifiers || {}
-        const commonTiers = [clampTier9(track.weaponCommon1Tier), clampTier9(track.weaponCommon2Tier)]
-        for (let i = 0; i < 2; i++) {
-            const slot = slots[i]; if (!slot?.modifierId) continue
-            const ladder = table[slot.modifierId]?.[slot.size]
-            const val = Number(ladder?.[commonTiers[i] - 1]) || 0
-            if (val !== 0) deltas[slot.modifierId] = (deltas[slot.modifierId] || 0) + val
-        }
-        const buffTier = clampTier9(track.weaponBuffTier)
-        normalizeWeaponBuffBonuses(weapon.buffBonuses).forEach(b => {
-            const val = Number(b.values[buffTier - 1]) || 0
-            if (val !== 0) deltas[b.modifierId] = (deltas[b.modifierId] || 0) + val
-        })
-        const filtered = {}
-        const stats = track.stats || {}
-        Object.entries(deltas).forEach(([mid, v]) => { if (mid in stats) filtered[mid] = v })
-        return filtered
-    }
-
-    const applyWeaponDeltasToTrack = (track, newDeltas) => {
-        const old = track.weaponAppliedDeltas || {}
-        if (!track.stats) track.stats = createDefaultStats()
-        new Set([...Object.keys(old), ...Object.keys(newDeltas || {})]).forEach(mid => {
-            if (mid in track.stats) {
-                const diff = (Number(newDeltas?.[mid]) || 0) - (Number(old[mid]) || 0)
-                if (diff !== 0) track.stats[mid] = (Number(track.stats[mid]) || 0) + diff
-            }
-        })
-        track.weaponAppliedDeltas = { ...newDeltas }
-        track.gaugeEfficiency = Number(track.stats.ult_charge_eff) || 0
-        track.linkCdReduction = clampPercent(track.stats.link_cd_reduction)
-        track.originiumArtsPower = Number(track.stats.originium_arts_power) || 0
-    }
-
-    function syncTrackWeaponModifiers(trackId) {
-        const track = tracks.value.find(t => t.id === trackId)
-        if (track) applyWeaponDeltasToTrack(track, computeWeaponDeltasForTrack(track))
-    }
-    function syncAllWeaponModifiers() { tracks.value.forEach(t => t.id && syncTrackWeaponModifiers(t.id)) }
-
-    const getEquipmentById = (id) => equipmentDatabase.value.find(e => e.id === id) || null
-    const getEquipmentIdForSlot = (track, key) => track ? track[`equip${key.charAt(0).toUpperCase() + key.slice(1)}Id`] : null
-    const getEquipmentRefineTierForSlot = (track, key) => track ? clampEquipmentRefineTier(track[`equip${key.charAt(0).toUpperCase() + key.slice(1)}RefineTier`]) : 0
-
-    const computeEquipmentDeltasForTrack = (track) => {
-        const deltas = {}
-        if (!track?.id) return deltas
-        ['armor', 'gloves', 'accessory1', 'accessory2'].forEach(slot => {
-            const eq = getEquipmentById(getEquipmentIdForSlot(track, slot))
-            if (!eq || !eq.affixes) return
-            const is70 = Number(eq.level) === 70
-            const tier = is70 ? getEquipmentRefineTierForSlot(track, slot) : 0
-            const pick = (vals) => (Array.isArray(vals) && vals.length > 0) ? (Number(vals[is70 ? tier : 0] ?? vals[0]) || 0) : 0
-            if (eq.affixes.primary1?.modifierId) deltas[eq.affixes.primary1.modifierId] = (deltas[eq.affixes.primary1.modifierId] || 0) + pick(eq.affixes.primary1.values)
-            if (eq.affixes.primary2?.modifierId) deltas[eq.affixes.primary2.modifierId] = (deltas[eq.affixes.primary2.modifierId] || 0) + pick(eq.affixes.primary2.values)
-            const entries = Array.isArray(eq.affixes.adapter?.entries) ? eq.affixes.adapter.entries : []
-            if (entries.length > 0) {
-                entries.forEach(ent => { if (ent?.modifierId) deltas[ent.modifierId] = (deltas[ent.modifierId] || 0) + pick(ent.values) })
-            } else {
-                const ids = eq.affixes.adapter?.modifierIds || []; const v = pick(eq.affixes.adapter?.values)
-                if (v !== 0) ids.forEach(id => { if (id) deltas[id] = (deltas[id] || 0) + v })
-            }
-        })
-        const filtered = {}; const stats = track.stats || {}
-        Object.entries(deltas).forEach(([mid, v]) => { if (mid in stats) filtered[mid] = v })
-        return filtered
-    }
-
-    const applyEquipmentDeltasToTrack = (track, newDeltas) => {
-        const old = track.equipmentAppliedDeltas || {}
-        if (!track.stats) track.stats = createDefaultStats()
-        new Set([...Object.keys(old), ...Object.keys(newDeltas || {})]).forEach(mid => {
-            if (mid in track.stats) {
-                const diff = (Number(newDeltas?.[mid]) || 0) - (Number(old[mid]) || 0)
-                if (diff !== 0) track.stats[mid] = (Number(track.stats[mid]) || 0) + diff
-            }
-        })
-        track.equipmentAppliedDeltas = { ...newDeltas }
-        track.gaugeEfficiency = Number(track.stats.ult_charge_eff) || 0
-        track.linkCdReduction = clampPercent(track.stats.link_cd_reduction)
-        track.originiumArtsPower = Number(track.stats.originium_arts_power) || 0
-    }
-
-    function syncTrackEquipmentModifiers(trackId) {
-        const track = tracks.value.find(t => t.id === trackId); if (!track) return
-        ['armor', 'gloves', 'accessory1', 'accessory2'].forEach(slot => {
-            const eq = getEquipmentById(getEquipmentIdForSlot(track, slot))
-            const key = `equip${slot.charAt(0).toUpperCase() + slot.slice(1)}RefineTier`
-            track[key] = (eq && Number(eq.level) === 70) ? clampEquipmentRefineTier(track[key]) : 0
-        })
-        applyEquipmentDeltasToTrack(track, computeEquipmentDeltasForTrack(track))
-    }
-    function syncAllEquipmentModifiers() { tracks.value.forEach(t => t.id && syncTrackEquipmentModifiers(t.id)) }
-
-    const getEquipmentCategoryOverride = (cat) => equipmentCategoryOverrides.value?.[cat] || null
-    function updateEquipmentCategoryOverride(cat, patch) {
-        if (!cat) return; if (!equipmentCategoryOverrides.value[cat]) equipmentCategoryOverrides.value[cat] = {}
-        Object.assign(equipmentCategoryOverrides.value[cat], patch); commitState()
-    }
-    const getActiveSetBonusCategories = (trackId) => {
-        const counts = new Map(); [getEquipmentIdForSlot(tracks.value.find(t => t.id === trackId), 'armor'), getEquipmentIdForSlot(tracks.value.find(t => t.id === trackId), 'gloves'), getEquipmentIdForSlot(tracks.value.find(t => t.id === trackId), 'accessory1'), getEquipmentIdForSlot(tracks.value.find(t => t.id === trackId), 'accessory2')].filter(Boolean).forEach(id => {
-            const cat = getEquipmentById(id)?.category; if (cat) counts.set(cat, (counts.get(cat) || 0) + 1)
-        })
-        return [...counts.entries()].filter(([, c]) => c >= 3).map(([cat]) => cat)
-    }
-    const getSetBonusDuration = (cat) => {
-        const d = getEquipmentCategoryOverride(cat)?.setBonus?.duration ?? equipmentCategoryConfigs.value?.[cat]?.setBonus?.duration
-        return Math.max(0, Number(d) || 0)
-    }
-
     const teamTracksInfo = computed(() => tracks.value.map(t => ({ ...t, ...(characterRoster.value.find(c => c.id === t.id) || { name: tr('timelineGrid.track.selectOperator'), avatar: '', rarity: 0 }) })))
-    const activeWeapon = computed(() => getWeaponById(tracks.value.find(t => t.id === activeTrackId.value)?.weaponId) || null)
     const formatTimeLabel = (t) => {
         if (t == null) return ''; const f = Math.round(t * 60); const s = Math.floor(f / 60); return f % 60 === 0 ? `${s}s` : `${s}s ${(f % 60).toString().padStart(2, '0')}f`
     }
@@ -1051,29 +725,10 @@ export const useTimelineStore = defineStore('timeline', () => {
         })].sort((a, b) => (TYPE_ORDER[a.type] || 99) - (TYPE_ORDER[b.type] || 99))
     })
 
-    const activeWeaponSkillLibrary = computed(() => {
-        const w = activeWeapon.value; if (!w) return []
-        const raw = (w.skills?.length > 0) ? w.skills : [{ id: 'core', name: w.buffName || w.name || tr('weapon.skill'), type: 'weapon', duration: w.duration ?? 0, icon: w.icon || '/weapons/default.webp' }]
-        return raw.map((r, i) => {
-            const lid = `weaponlib_${w.id}_${r.id || i}`; return { id: lid, name: r.name || w.name, type: r.type || 'weapon', librarySource: 'weapon', weaponId: w.id, duration: Number(r.duration ?? w.duration) || 0, cooldown: Number(r.cooldown ?? w.cooldown) || 0, icon: r.icon || w.icon, element: r.element || w.element || 'physical', customColor: '#b37feb', ...r, ...weaponOverrides.value[lid] }
-        })
-    })
-
-    const activeSetBonusLibrary = computed(() => {
-        if (!activeTrackId.value) return []
-        return getActiveSetBonusCategories(activeTrackId.value).map(cat => ({ id: `setlib_${activeTrackId.value}_${cat}`, name: cat, type: 'set', librarySource: 'set', setCategory: cat, duration: getSetBonusDuration(cat), icon: '', customColor: '#2dd4bf' }))
-    })
-
-    function applyEnemyPreset(eid) {
-        activeEnemyId.value = eid; if (eid === 'custom') Object.assign(systemConstants.value, customEnemyParams.value)
-        else { const e = enemyDatabase.value.find(x => x.id === eid); if (e) Object.assign(systemConstants.value, { maxStagger: e.maxStagger, staggerNodeCount: e.staggerNodeCount, staggerNodeDuration: e.staggerNodeDuration, staggerBreakDuration: e.staggerBreakDuration, executionRecovery: e.executionRecovery }) }
-    }
-
     function setTimelineShift(v) { timelineShift.value = Math.min(Math.max(0, v), totalTimelineWidthPx.value - timelineRect.value.width) }
     function selectTrack(tid) { activeTrackId.value = tid; clearSelection() }
     function selectAction(id) { const same = id === selectedActionId.value; clearSelection(); if (!same) { selectedActionId.value = id; multiSelectedIds.value.add(id) } }
-    function clearSelection() { selectedActionId.value = selectedConnectionId.value = selectedAnomalyId.value = selectedCycleBoundaryId.value = selectedSwitchEventId.value = selectedWeaponStatusId.value = null; multiSelectedIds.value.clear(); selectedLibrarySkillId.value = null; selectedLibrarySource.value = 'character' }
-
+    function clearSelection() { selectedActionId.value = selectedConnectionId.value = selectedAnomalyId.value = selectedCycleBoundaryId.value = selectedSwitchEventId.value = null; multiSelectedIds.value.clear(); selectedLibrarySkillId.value = null; selectedLibrarySource.value = 'character' }
     function normalizeComboLinksInTracks() {
         const groups = new Map(); tracks.value.forEach(t => t.actions.forEach(a => { if (a.comboGroupId) { if (!groups.has(a.comboGroupId)) groups.set(a.comboGroupId, []); groups.get(a.comboGroupId).push(a) } }))
         groups.forEach(actions => {
@@ -1088,7 +743,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         const createAction = (s, st) => {
             const eidMap = new Map(); const anomalies = (s.physicalAnomaly || []).map(row => row.map(eff => { const nid = uid(); if (eff?._id) eidMap.set(eff._id, nid); return { ...eff, _id: nid } }))
             const ticks = (s.damageTicks || []).map(tk => ({ ...tk, boundEffects: (tk.boundEffects || []).map(id => eidMap.get(id) || id) }))
-            return { ...s, instanceId: `inst_${uid()}`, librarySource: s.librarySource || 'character', sourceWeaponId: s.weaponId || t.weaponId || null, physicalAnomaly: anomalies, damageTicks: ticks, logicalStartTime: st, startTime: st }
+            return { ...s, instanceId: `inst_${uid()}`, librarySource: s.librarySource || 'character', physicalAnomaly: anomalies, damageTicks: ticks, logicalStartTime: st, startTime: st }
         }
         if (skill.segments?.length >= 2) {
             const gid = `combo_${uid()}`; let cur = start; const ins = []
@@ -1105,7 +760,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         const targets = new Set(multiSelectedIds.value); if (selectedActionId.value) targets.add(selectedActionId.value)
         targets.forEach(id => { const a = getActionById(id)?.node; if (a?.comboGroupId && a.comboLinked !== false) tracks.value.forEach(t => t.actions.forEach(x => { if (x.comboGroupId === a.comboGroupId) targets.add(x.instanceId) })) })
         const pulls = []; targets.forEach(id => { const a = getActionById(id)?.node; if (a && ['link', 'ultimate'].includes(a.type)) pulls.push({ time: a.startTime, amount: a.type === 'link' ? 0.5 : (Number(a.animationTime) || 1.5) }) })
-        if (selectedWeaponStatusId.value) weaponStatuses.value = weaponStatuses.value.filter(s => s.id !== selectedWeaponStatusId.value)
         if (selectedSwitchEventId.value) switchEvents.value = switchEvents.value.filter(s => s.id !== selectedSwitchEventId.value)
         if (selectedCycleBoundaryId.value) cycleBoundaries.value = cycleBoundaries.value.filter(b => b.id !== selectedCycleBoundaryId.value)
         tracks.value.forEach(t => { t.actions = t.actions.filter(a => !targets.has(a.instanceId)) })
@@ -1154,29 +808,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         return layouts
     })
 
-    const statusNodeRects = computed(() => {
-        const map = new Map(); const SIZE = 20; const MARGIN = 2; const OFF_W = 8; const OFF_S = 32
-        weaponStatuses.value.forEach(status => {
-            const tIdx = tracks.value.findIndex(t => t.id === status.trackId); const tRect = trackLaneRects.value[tIdx]; if (!tRect) return
-            const start = Number(status.startTime) || 0; const left = timeToPx(start); const top = (tRect.top + tRect.height + (status.type === 'set' ? OFF_S : OFF_W)) - timelineRect.value.top
-            const iconRect = { left, top, width: SIZE, height: SIZE, right: left + SIZE }; map.set(status.id, { rect: iconRect })
-            let dur = getShiftedEndTime(start, status.duration, status.id) - start; let isC = false; const cut = statusConsumptionTimeById.value.get(status.id)
-            if (Number.isFinite(cut)) { const cDur = cut - start; if (cDur >= 0 && cDur < dur - 0.0001) { dur = Math.max(0, cDur); isC = true } }
-            if (isC) { const bWidth = dur > 0 ? Math.max(0, timeToPx(start + dur) - timeToPx(start) - SIZE - MARGIN) : 0; map.set(`${status.id}_transfer`, { rect: { left: iconRect.left + SIZE + MARGIN + bWidth, width: 0, right: iconRect.left + SIZE + MARGIN + bWidth, height: SIZE, top: iconRect.top } }) }
-        })
-        return map
-    })
-
-    const statusConsumptionTimeById = computed(() => {
-        const map = new Map(); connections.value.forEach(c => {
-            if (!c.isConsumption) return; const f = resolveNode(_getConnectionEndpointId(c, 'from')); if (f?.type !== 'status') return
-            const t = resolveNode(_getConnectionEndpointId(c, 'to')); if (!t) return
-            let tTime = 0; if (t.type === 'action' || t.type === 'status') tTime = Number(t.node.startTime) || 0
-            else if (t.type === 'effect') { const a = getActionById(t.actionId); if (a) tTime = getShiftedEndTime(a.node.startTime, t.node.offset || 0, a.id) }
-            const cTime = snapMs(tTime - (c.consumptionOffset || 0)); if (!map.has(f.id) || cTime < map.get(f.id)) map.set(f.id, cTime)
-        }); return map
-    })
-
     function toTimelineSpace(vx, vy) { return { x: vx - timelineRect.value.left + timelineShift.value, y: vy - timelineRect.value.top + timelineScrollTop.value } }
     function toViewportSpace(tx, ty) { return { x: tx - timelineShift.value + timelineRect.value.left, y: ty - timelineScrollTop.value + timelineRect.value.top } }
 
@@ -1215,24 +846,68 @@ export const useTimelineStore = defineStore('timeline', () => {
     function pullSubsequentActions(trig, amt, exclude = []) { if (amt <= 0) return; const exSet = new Set(Array.isArray(exclude) ? exclude : [exclude]); tracks.value.forEach(t => { t.actions.forEach(a => { if (!exSet.has(a.instanceId) && a.startTime >= trig) { a.startTime = Math.max(0, a.startTime - amt); a.logicalStartTime = Math.max(0, a.logicalStartTime !== undefined ? a.logicalStartTime - amt : a.startTime) } }); t.actions.sort((a, b) => a.startTime - b.startTime) }) }
 
     async function fetchGameData() {
-        try { isLoading.value = true; const d = await executeFetch(); if (d) { if (d.characterRoster) characterRoster.value = d.characterRoster.sort((a, b) => b.rarity - a.rarity).map(c => { normalizeAttackSegmentsForCharacter(c); return c }); iconDatabase.value = d.ICON_DATABASE || {}; enemyDatabase.value = d.enemyDatabase || []; enemyCategories.value = d.enemyCategories || []; weaponDatabase.value = (d.weaponDatabase || []).map(w => ({ ...w, commonSlots: normalizeWeaponCommonSlots(w.commonSlots), buffBonuses: normalizeWeaponBuffBonuses(w.buffBonuses) })); equipmentDatabase.value = normalizeEquipmentDatabase(d.equipmentDatabase); equipmentCategories.value = d.equipmentCategories || []; equipmentCategoryConfigs.value = d.equipmentCategoryConfigs || {} } historyStack.value = []; historyIndex.value = -1; commitState() } catch (e) { console.error(e) } finally { isLoading.value = false }
+        try { 
+            isLoading.value = true; 
+            const d = await executeFetch(); 
+            if (d) { 
+                if (d.characterRoster) {
+                    characterRoster.value = d.characterRoster.sort((a, b) => b.rarity - a.rarity).map(c => { 
+                        normalizeAttackSegmentsForCharacter(c); 
+                        return c 
+                    }); 
+                }
+                iconDatabase.value = d.ICON_DATABASE || {}; 
+            } 
+            historyStack.value = []; 
+            historyIndex.value = -1; 
+            commitState(); 
+        } catch (e) { 
+            console.error(e) 
+        } finally { 
+            isLoading.value = false 
+        }
+    }
+
+    // --- 补充缺失的 UI 与状态管理方法 ---
+    function setSelectedAnomalyId(id) { selectedAnomalyId.value = id }
+    function setHoveredAction(id) { hoveredActionId.value = id }
+    function nudgeSelection(dir) { /* stub */ }
+    function setPrepDuration(val, { commit = true } = {}) {
+        prepDuration.value = Math.max(MIN_PREP_DURATION, Number(val) || 0)
+        if (commit) commitState()
+    }
+    function setTrackLaneRect(index, rect) { trackLaneRects.value[index] = rect }
+    function setTimelineRect(width, height, top, right, bottom, left) { timelineRect.value = { width, height, top, right, bottom, left } }
+    function setScrollTop(top) { timelineScrollTop.value = top }
+    function togglePrepExpanded() { prepExpanded.value = !prepExpanded.value; commitState() }
+    function setCursorPosition(x, y) { cursorPosition.value = { x, y } }
+    function toggleCursorGuide() { showCursorGuide.value = !showCursorGuide.value }
+    function toggleBoxSelectMode() { isBoxSelectMode.value = !isBoxSelectMode.value }
+    function toggleSnapStep() { snapStep.value = snapStep.value < 0.1 ? 0.1 : 0.05 }
+    function toggleNewCompiler() { /* stub */ }
+
+    const contextMenu = ref({ visible: false, x: 0, y: 0, targetId: null, clickTime: 0 })
+    function closeContextMenu() { contextMenu.value.visible = false }
+    function openContextMenu(evt, targetId = null, clickTime = 0) {
+        evt.preventDefault()
+        contextMenu.value = { visible: true, x: evt.clientX, y: evt.clientY, targetId, clickTime }
     }
 
     return {
+        setTrackLaneRect, setTimelineRect, setScrollTop, contextMenu, closeContextMenu, openContextMenu,
+        togglePrepExpanded, setCursorPosition, toggleCursorGuide, toggleBoxSelectMode, toggleSnapStep, toggleNewCompiler,
+        
         MAX_SCENARIOS, toTimelineSpace, toViewportSpace, toGameTime, toRealTime,
         systemConstants, isLoading, characterRoster, iconDatabase, tracks, connections, activeTrackId, timelineScrollTop, timelineShift, timelineRect, trackLaneRects, nodeRects, draggingSkillData,
-        selectedActionId, selectedLibrarySkillId, selectedLibrarySource, selectedWeaponStatusId, multiSelectedIds, clipboard, isCapturing, setIsCapturing, showCursorGuide, isBoxSelectMode, cursorPosTimeline, cursorCurrentTime, cursorPosition, snapStep,
+        selectedActionId, selectedLibrarySkillId, selectedLibrarySource, multiSelectedIds, clipboard, isCapturing, setIsCapturing, showCursorGuide, isBoxSelectMode, cursorPosTimeline, cursorCurrentTime, cursorPosition, snapStep,
         selectedAnomalyId, setSelectedAnomalyId, updateTrackGaugeEfficiency,
-        teamTracksInfo, activeSkillLibrary, activeWeaponSkillLibrary, BASE_BLOCK_WIDTH, setBaseBlockWidth, formatTimeLabel, ZOOM_LIMITS, timeBlockWidth, ELEMENT_COLORS, getCharacterElementColor, isActionSelected, hoveredActionId, setHoveredAction,
+        teamTracksInfo, activeSkillLibrary, BASE_BLOCK_WIDTH, setBaseBlockWidth, formatTimeLabel, ZOOM_LIMITS, timeBlockWidth, ELEMENT_COLORS, getCharacterElementColor, isActionSelected, hoveredActionId, setHoveredAction,
         fetchGameData, TOTAL_DURATION, selectTrack, clearSelection, undo, redo, commitState, addSkillToTrack, removeCurrentSelection, updateAction,
-        syncAllWeaponModifiers, syncAllEquipmentModifiers, getModifierLabel, getColor, toggleConnectionTool, nudgeSelection,
-        enemyDatabase, activeEnemyId, applyEnemyPreset, ENEMY_TIERS, enemyCategories,
+        getModifierLabel, getColor, toggleConnectionTool, nudgeSelection,
+        ENEMY_TIERS,
         scenarioList, activeScenarioId, switchScenario, addScenario, duplicateScenario, deleteScenario,
-        effectLayouts, getActionById, getEffectById, weaponDatabase, weaponOverrides, weaponStatuses, activeWeapon, getWeaponById,
-        equipmentDatabase, equipmentCategories, equipmentCategoryConfigs, getEquipmentById, updateTrackEquipment, updateTrackEquipmentTier,
-        equipmentCategoryOverrides, updateEquipmentCategoryOverride, activeSetBonusLibrary, getActiveSetBonusCategories,
-        misc, prepDuration, prepExpanded, viewDuration, prepZoneWidthPx, totalTimelineWidthPx,
+        effectLayouts, getActionById, getEffectById, prepDuration, prepExpanded, viewDuration, prepZoneWidthPx, totalTimelineWidthPx,
         timeToPx, pxToTime, formatAxisTimeLabel, setPrepDuration,
-        globalExtensions, getShiftedEndTime, refreshAllActionShifts, statusNodeRects, statusConsumptionTimeById
+        globalExtensions, getShiftedEndTime, refreshAllActionShifts
     }
 })

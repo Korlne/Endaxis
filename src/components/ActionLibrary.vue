@@ -12,7 +12,7 @@ const activeTrack = computed(() => store.tracks.find(t => t.id === store.activeT
 const activeCharacter = computed(() => {
   return store.characterRoster.find(c => c.id === store.activeTrackId)
 })
-const activeWeapon = computed(() => activeTrack.value?.weaponId ? store.getWeaponById(activeTrack.value.weaponId) : null)
+const activeWeapon = computed(() => null)
 const hasActiveCharacter = computed(() => !!(activeTrack.value && activeCharacter.value))
 const hasAnyEquipmentEquipped = computed(() => {
   const t = activeTrack.value
@@ -23,12 +23,8 @@ const hasAnyEquipmentEquipped = computed(() => {
 const activeCharacterName = computed(() => activeCharacter.value ? activeCharacter.value.name : t('actionLibrary.fallback.noOperator'))
 const activeWeaponName = computed(() => activeWeapon.value ? activeWeapon.value.name : t('actionLibrary.fallback.noWeapon'))
 const activeLibraryTab = ref('character')
-const hasWeaponLibrary = computed(() => store.activeWeaponSkillLibrary.length > 0)
-const currentLibrary = computed(() => {
-  if (activeLibraryTab.value === 'weapon') return store.activeWeaponSkillLibrary
-  if (activeLibraryTab.value === 'set') return store.activeSetBonusLibrary
-  return store.activeSkillLibrary
-})
+const hasWeaponLibrary = computed(() => false)
+const currentLibrary = computed(() => store.activeSkillLibrary)
 const activeLibraryTitle = computed(() => {
   if (activeLibraryTab.value === 'weapon') return `${activeCharacterName.value} · ${activeWeaponName.value}`
   if (activeLibraryTab.value === 'set') return `${activeCharacterName.value} · ${t('actionLibrary.suffix.equipment')}`
@@ -154,14 +150,7 @@ const weaponBuffTierValue = computed({
 })
 
 function getEquipmentForSlot(slotKey) {
-  const t = activeTrack.value
-  if (!t) return null
-  let id = null
-  if (slotKey === 'armor') id = t.equipArmorId
-  else if (slotKey === 'gloves') id = t.equipGlovesId
-  else if (slotKey === 'accessory1') id = t.equipAccessory1Id
-  else if (slotKey === 'accessory2') id = t.equipAccessory2Id
-  return store.getEquipmentById(id)
+  return null
 }
 
 const equipArmor = computed(() => getEquipmentForSlot('armor'))
