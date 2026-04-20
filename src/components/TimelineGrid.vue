@@ -8,7 +8,6 @@ import ContextMenu from './ContextMenu.vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
-import { snapMs } from '@/utils/precision.js'
 
 const store = useTimelineStore()
 const { t, locale } = useI18n()
@@ -144,7 +143,7 @@ function openCharacterSelector(index) {
   targetTrackIndex.value = index
   searchQuery.value = ''
   filterElement.value = 'ALL'
-  isSelectorVisible = true
+  isSelectorVisible.value = true
 }
 
 function confirmCharacterSelection(charId) {
@@ -339,58 +338,46 @@ const rawDynamicTicks = computed(() => {
   const btStart = realStartVT - prep
   const btEnd = realEndVT - prep
 
-  const gameStartVT = store.toGameTime(realStartVT);
+  const gameStartVT = store.toGameTime ? store.toGameTime(realStartVT) : realStartVT;
   const gameStartBT = gameStartVT - prep
 
-  let subDivision = 1;
-  if (width >= 800) subDivision = 60;
-  else if (width >= 200) subDivision = 10;
-  else if (width >= 100) subDivision = 2;
+  let tickStep = 60;
+  if (width >= 800) tickStep = 1;
+  else if (width >= 200) tickStep = 10;
+  else if (width >= 100) tickStep = 30;
 
   const minBtForTicks = (!store.prepExpanded && prep > 0) ? 0 : Math.min(btStart, gameStartBT)
-  const startStep = Math.floor(minBtForTicks * subDivision);
-  const endStep = Math.ceil(btEnd * subDivision);
+  const startStep = Math.floor(minBtForTicks / tickStep) * tickStep;
+  const endStep = Math.ceil(btEnd / tickStep) * tickStep;
 
   const realTicks = [];
   const gameTicks = [];
 
-  for (let i = startStep; i <= endStep; i++) {
-    const bt = i / subDivision;
+  for (let i = startStep; i <= endStep; i += tickStep) {
+    const bt = i;
     let type = '';
     let label = '';
-    const isIntegerSecond = (i % subDivision === 0);
+    const isMajor = (i % 60 === 0);
 
-    if (isIntegerSecond) {
-      const secondValue = Math.round(bt);
-      const isFiveSec = secondValue % 5 === 0;
-      const showAllLabels = width >= 100;
-
-      if (showAllLabels || isFiveSec) {
-        type = 'major';
-        label = `${secondValue}s`;
-      } else {
-        type = 'major-dim';
-      }
-
+    if (isMajor) {
+      type = 'major';
+      label = `${bt}`;
     } else {
-      if (subDivision === 2) {
+      if (tickStep === 30) {
         type = 'tenth';
-      } else if (subDivision === 10) {
+      } else if (tickStep === 10) {
         type = 'tenth';
-        if (width >= 500) label = `.${Math.round((bt % 1) * 10)}`;
-      } else if (subDivision === 60) {
-        const frameIdx = i % 60;
-        if (frameIdx % 10 === 0 && frameIdx !== 0) {
+        if (width >= 500) label = `${bt}`;
+      } else if (tickStep === 1) {
+        if (i % 10 === 0) {
           type = 'tenth';
-          if (width >= 600) label = `${frameIdx}f`;
-        } else if (frameIdx % 2 === 0) {
+          if (width >= 600) label = `${bt}`;
+        } else if (i % 2 === 0) {
           type = 'frame';
         } else {
-          if (width < 1000) continue;
-          type = 'frame';
+          if (width >= 1000) type = 'frame';
+          else continue;
         }
-      } else {
-        continue;
       }
     }
 
@@ -400,23 +387,13 @@ const rawDynamicTicks = computed(() => {
     }
     const realX = store.timeToPx(realVT)
 
-    realTicks.push({
-      time: bt,
-      type,
-      label,
-      x: realX
-    });
+    realTicks.push({ time: bt, type, label, x: realX });
 
     const gameVT = bt + prep
-    const mappedRealVT = store.toRealTime(gameVT);
+    const mappedRealVT = store.toRealTime ? store.toRealTime(gameVT) : gameVT;
 
     if (mappedRealVT >= realStartVT && mappedRealVT <= realEndVT) {
-      gameTicks.push({
-        time: bt,
-        type,
-        label,
-        x: store.timeToPx(mappedRealVT)
-      });
+      gameTicks.push({ time: bt, type, label, x: store.timeToPx(mappedRealVT) });
     }
   }
 
@@ -438,11 +415,7 @@ function updateScrollbarHeight() {
 function calculateTimeFromEvent(evt, fixedStep = null) {
   const mouseXInTrack = store.toTimelineSpace(evt.clientX, evt.clientY).x
   const rawTime = store.pxToTime(mouseXInTrack)
-  const step = fixedStep !== null ? fixedStep : store.snapStep
-  const inverse = 1 / step
-  let startTime = Math.round(rawTime * inverse) / inverse
-  if (startTime < 0) startTime = 0
-  return startTime
+  return Math.max(0, Math.round(rawTime))
 }
 
 function onPrepResizeMouseDown(evt) {
@@ -458,7 +431,7 @@ function onPrepResizeMouseDown(evt) {
 
 function onPrepResizeMouseMove(evt) {
   if (!isResizingPrep.value) return
-  const newDuration = calculateTimeFromEvent(evt, store.snapStep)
+  const newDuration = calculateTimeFromEvent(evt)
   store.setPrepDuration(newDuration, { commit: false })
 }
 
@@ -476,7 +449,7 @@ const prepDurationDraft = ref('')
 const prepDurationInputRef = ref(null)
 
 function openPrepDurationEditor() {
-  prepDurationDraft.value = String(Number(store.prepDuration) || 0)
+  prepDurationDraft.value = String(Math.round(Number(store.prepDuration) || 0))
   isPrepDurationEditorOpen.value = true
   nextTick(() => prepDurationInputRef.value?.focus?.())
 }
@@ -486,7 +459,7 @@ function closePrepDurationEditor() {
 }
 
 function applyPrepDurationDraft() {
-  const v = Number(prepDurationDraft.value)
+  const v = Math.round(Number(prepDurationDraft.value))
   if (!Number.isFinite(v)) return
   store.setPrepDuration(v)
   closePrepDurationEditor()
@@ -607,7 +580,7 @@ function toMutedRgba(color, alpha = 0.78) {
 }
 
 const cursorGaugeRows = computed(() => {
-  const time = snapMs(store.cursorCurrentTime)
+  const time = Math.round(store.cursorCurrentTime)
   const rows = []
 
   for (const track of store.teamTracksInfo) {
@@ -615,7 +588,7 @@ const cursorGaugeRows = computed(() => {
 
     const points = store.gaugeSeriesByTrackId.get(track.id) || []
     const point = getStepPointAtTime(points, time)
-    const val = snapMs(point?.val ?? 0)
+    const val = Math.round(point?.val ?? 0)
 
     const max = store.getTrackGaugeMax(track.id)
     const baseColor = store.getCharacterElementColor(track.id)
@@ -863,9 +836,8 @@ function onBackgroundContextMenu(evt) {
   if (isBoxSelecting.value || isDragStarted.value) return
   const cursorPos = store.toTimelineSpace(evt.clientX, evt.clientY)
   const rawTime = store.pxToTime(cursorPos.x)
-  const snap = store.snapStep
-  let clickTime = Math.round(rawTime / snap) * snap
-  clickTime = snapMs(Math.max(0, clickTime))
+  let clickTime = Math.round(rawTime)
+  clickTime = Math.max(0, clickTime)
   store.openContextMenu(evt, null, clickTime)
 }
 
@@ -950,18 +922,16 @@ function updateDragPosition(clientX) {
 
   const timelineX = store.toTimelineSpace(clientX, initialMouseY.value).x
   const mouseTime = store.pxToTime(timelineX)
-  const deltaTime = mouseTime - dragStartMouseTime.value
+  const deltaTime = Math.round(mouseTime - dragStartMouseTime.value)
 
   const selectedIds = store.multiSelectedIds;
-  const snap = store.snapStep;
 
   store.tracks.forEach(t => {
     t.actions.forEach(a => {
       if (selectedIds.has(a.instanceId) && !a.isLocked) {
         const orgLogical = dragStartTimes.get(a.instanceId);
         const targetTime = orgLogical + deltaTime;
-        let snappedTime = Math.round(targetTime / snap) * snap;
-        a.logicalStartTime = Math.max(0, snapMs(snappedTime));
+        a.logicalStartTime = Math.max(0, Math.round(targetTime));
       }
     });
   });
@@ -1009,9 +979,8 @@ function onWindowMouseMove(evt) {
       const dist = Math.sqrt(Math.pow(evt.clientX - initialMouseX.value, 2) + Math.pow(evt.clientY - initialMouseY.value, 2))
       if (dist > dragThreshold) isDragStarted.value = true; else return
     }
-    let newTime = calculateTimeFromEvent(evt, store.snapStep)
-    if (newTime > store.viewDuration) newTime = store.viewDuration
-    newTime = snapMs(newTime)
+    let newTime = calculateTimeFromEvent(evt)
+    if (newTime > store.viewDuration) newTime = Math.round(store.viewDuration)
     store.updateSwitchEvent(draggingSwitchEventId.value, newTime)
     return
   }
@@ -1021,9 +990,8 @@ function onWindowMouseMove(evt) {
       const dist = Math.sqrt(Math.pow(evt.clientX - initialMouseX.value, 2) + Math.pow(evt.clientY - initialMouseY.value, 2))
       if (dist > dragThreshold) isDragStarted.value = true; else return
     }
-    let newTime = calculateTimeFromEvent(evt, store.snapStep)
-    if (newTime > store.viewDuration) newTime = store.viewDuration
-    newTime = snapMs(newTime)
+    let newTime = calculateTimeFromEvent(evt)
+    if (newTime > store.viewDuration) newTime = Math.round(store.viewDuration)
     store.updateCycleBoundary(draggingCycleBoundaryId.value, newTime)
     return
   }
@@ -1122,11 +1090,7 @@ function calculateTimeFromDropEvent(evt, skill, fixedStep = null) {
   const offsetX = Number(skill?.dragOffsetX) || 0
   const mouseXInTrack = store.toTimelineSpace((evt?.clientX || 0) - offsetX, evt?.clientY || 0).x
   const rawTime = store.pxToTime(mouseXInTrack)
-  const step = fixedStep !== null ? fixedStep : store.snapStep
-  const inverse = 1 / step
-  let startTime = Math.round(rawTime * inverse) / inverse
-  if (startTime < 0) startTime = 0
-  return startTime
+  return Math.max(0, Math.round(rawTime))
 }
 
 function onTrackDrop(track, evt) {
@@ -1271,8 +1235,8 @@ onUnmounted(() => {
           <button class="mini-tool-btn" :class="{ 'is-active': store.isBoxSelectMode }" @click="store.toggleBoxSelectMode" :title="t('timelineGrid.toolbar.boxSelect')">
             <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 4"/><path d="M8 12h8" stroke-width="1.5"/><path d="M12 8v8" stroke-width="1.5"/></svg>
           </button>
-          <button class="mini-tool-btn" :class="{ 'is-active': store.snapStep < 0.1 }" @click="store.toggleSnapStep" :title="t('timelineGrid.toolbar.snapPrecision')">
-            <span class="btn-text">{{ store.snapStep < 0.05 ? '1f' : '0.1s' }}</span>
+          <button class="mini-tool-btn is-active" title="Tick Precision" style="cursor: default;">
+            <span class="btn-text">1 Tick</span>
           </button>
           <button class="mini-tool-btn" :class="{ 'is-active': store.useNewCompiler }" @click="store.toggleNewCompiler" :title="t('timelineGrid.toolbar.compilerToggle')">
             <span class="btn-text">{{ store.useNewCompiler ? t('common.new') : t('common.old') }}</span>
@@ -1307,8 +1271,8 @@ onUnmounted(() => {
        </div>
 
       <div v-if="isPrepDurationEditorOpen" class="prep-duration-popover" :style="{ left: `${prepZoneWidthPxRounded + 8}px` }" @mousedown.stop>
-        <input ref="prepDurationInputRef" v-model="prepDurationDraft" class="prep-duration-input" type="number" min="0.5" step="0.1" @keydown.enter.prevent="applyPrepDurationDraft" @keydown.esc.prevent="closePrepDurationEditor" @blur="applyPrepDurationDraft" />
-        <span class="prep-duration-unit">s</span>
+        <input ref="prepDurationInputRef" v-model="prepDurationDraft" class="prep-duration-input" type="number" min="1" step="1" @keydown.enter.prevent="applyPrepDurationDraft" @keydown.esc.prevent="closePrepDurationEditor" @blur="applyPrepDurationDraft" />
+        <span class="prep-duration-unit">Tick</span>
       </div>
 
       <div v-if="store.prepDuration > 0" class="prep-rtgt-wrapper" :style="{ width: `${prepZoneWidthPxRounded}px` }">
@@ -1351,7 +1315,7 @@ onUnmounted(() => {
     <div class="tracks-content-viewport" ref="tracksContentRef" @mousedown="onContentMouseDown" @wheel="handleTrackWheel" @mousemove="onGridMouseMove" @mouseleave="onGridMouseLeave" @contextmenu="onBackgroundContextMenu">
       <div class="tracks-content-scroller" :style="transformStyle">
         <div v-if="store.showCursorGuide && !store.isBoxSelectMode" class="cursor-guide" :style="{ transform: `translateX(${store.cursorPosTimeline.x}px)` }" v-show="isCursorVisible">
-          <div class="guide-time-label">{{ store.formatAxisTimeLabel(store.cursorCurrentTime) }}</div>
+          <div class="guide-time-label">{{ Math.round(store.cursorCurrentTime) }}</div>
           <div class="guide-sp-label">SP: {{ currentSpValue }}</div>
           <div class="guide-stagger-label">STAGGER: {{ currentStaggerValue }}</div>
           <div v-if="cursorGaugeRows.length" class="guide-gauge-panel">
@@ -1359,7 +1323,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-for="boundary in (store.cycleBoundaries || [])" :key="boundary.id" class="cycle-guide" :class="{ 'is-selected': boundary.id === store.selectedCycleBoundaryId }" :style="{ left: `${store.timeToPx(boundary.time)}px` }" @mousedown="onCycleLineMouseDown($event, boundary.id)"><div class="cycle-label-time">{{ store.formatAxisTimeLabel(boundary.time) }}</div><div class="cycle-hit-area"></div></div>
+        <div v-for="boundary in (store.cycleBoundaries || [])" :key="boundary.id" class="cycle-guide" :class="{ 'is-selected': boundary.id === store.selectedCycleBoundaryId }" :style="{ left: `${store.timeToPx(boundary.time)}px` }" @mousedown="onCycleLineMouseDown($event, boundary.id)"><div class="cycle-label-time">{{ Math.round(boundary.time) }}</div><div class="cycle-hit-area"></div></div>
 
         <div v-if="alignGuide.visible" class="align-guide-layer"><div class="target-highlight-box" :style="{ left: `${alignGuide.targetRect.left}px`, top: `${alignGuide.targetRect.top}px`, width: `${alignGuide.targetRect.width}px`, height: `${alignGuide.targetRect.height}px`, color: alignGuide.color }"></div><div class="guide-line-vertical" :style="{ left: `${alignGuide.x}px`, color: alignGuide.color }"></div></div>
 
@@ -1385,7 +1349,7 @@ onUnmounted(() => {
           </div>
 
           <div class="global-freeze-layer">
-            <div v-for="(ext, idx) in activeFreezeRegions" :key="idx" class="freeze-region-dim" :style="{ left: `${store.timeToPx(ext.time)}px`, width: `${store.timeToPx(ext.time + ext.amount) - store.timeToPx(ext.time)}px` }"><div class="freeze-duration-label">{{ store.formatTimeLabel(ext.amount) }}</div></div>
+            <div v-for="(ext, idx) in activeFreezeRegions" :key="idx" class="freeze-region-dim" :style="{ left: `${store.timeToPx(ext.time)}px`, width: `${store.timeToPx(ext.time + ext.amount) - store.timeToPx(ext.time)}px` }"><div class="freeze-duration-label">{{ Math.round(ext.amount) }}</div></div>
           </div>
         </div>
       </div>

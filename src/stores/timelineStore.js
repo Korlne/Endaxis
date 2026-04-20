@@ -272,24 +272,15 @@ export const useTimelineStore = defineStore('timeline', () => {
         linkCdReduction: 0,
     })
 
+    /**
+     * 修改点 1: 轨道初始化单轨化
+     */
     const createDefaultTracks = () => [
-        createEmptyTrack(),
-        createEmptyTrack(),
-        createEmptyTrack(),
-        createEmptyTrack(),
+        createEmptyTrack()
     ]
 
     const tracks = ref(createDefaultTracks())
-    const connections = ref([])
     const characterOverrides = ref({})
-
-    const connectionMap = computed(() => {
-        const map = new Map()
-        for (const conn of connections.value) {
-            map.set(conn.id, conn)
-        }
-        return map
-    })
 
     const actionMap = computed(() => {
         const map = new Map()
@@ -341,10 +332,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         BASE_BLOCK_WIDTH.value = sanitizedVal
     }
 
-    function getConnectionById(connectionId) {
-        return connectionMap.value.get(connectionId)
-    }
-
     function getActionById(actionId) {
         return actionMap.value.get(actionId)
     }
@@ -355,83 +342,6 @@ export const useTimelineStore = defineStore('timeline', () => {
 
     function resolveNode(nodeId) {
         return getActionById(nodeId) || getEffectById(nodeId)
-    }
-
-    function getNodesOfConnection(connectionId) {
-        const conn = getConnectionById(connectionId)
-        if (!conn) {
-            return { fromNode: null, toNode: null }
-        }
-
-        const fromId = conn.fromNodeId || conn.fromEffectId || conn.from || null
-        const toId = conn.toNodeId || conn.toEffectId || conn.to || null
-
-        const fromNode = fromId ? resolveNode(fromId) : null
-        const toNode = toId ? resolveNode(toId) : null
-
-        return { fromNode, toNode }
-    }
-
-    function _getConnectionEndpointId(conn, side) {
-        if (!conn) return null
-        if (side === 'from') return conn.fromNodeId || conn.fromEffectId || conn.from || null
-        return conn.toNodeId || conn.toEffectId || conn.to || null
-    }
-
-    function normalizeConnection(rawConn) {
-        if (!rawConn) return null
-        const conn = { ...rawConn }
-
-        const fromId = _getConnectionEndpointId(conn, 'from')
-        const toId = _getConnectionEndpointId(conn, 'to')
-
-        if (fromId) conn.fromNodeId = fromId
-        if (toId) conn.toNodeId = toId
-
-        const fromNode = fromId ? resolveNode(fromId) : null
-        const toNode = toId ? resolveNode(toId) : null
-
-        if (!conn.fromNodeType && fromNode?.type) conn.fromNodeType = fromNode.type
-        if (!conn.toNodeType && toNode?.type) conn.toNodeType = toNode.type
-
-        if (fromNode?.type === 'effect') {
-            conn.fromEffectId = fromNode.id
-            conn.fromEffectIndex = fromNode.flatIndex
-            conn.from = fromNode.actionId
-        } else if (fromNode?.type === 'action') {
-            conn.from = fromNode.id
-        }
-
-        if (toNode?.type === 'effect') {
-            conn.toEffectId = toNode.id
-            conn.toEffectIndex = toNode.flatIndex
-            conn.to = toNode.actionId
-        } else if (toNode?.type === 'action') {
-            conn.to = toNode.id
-        }
-
-        return conn
-    }
-
-    function normalizeConnections(list) {
-        if (!Array.isArray(list)) return []
-        const out = []
-        for (const conn of list) {
-            const normalized = normalizeConnection(conn)
-            if (normalized) out.push(normalized)
-        }
-        return out
-    }
-
-    function pruneDanglingConnections() {
-        const before = connections.value.length
-        connections.value = connections.value.filter(conn => {
-            const fromId = _getConnectionEndpointId(conn, 'from')
-            const toId = _getConnectionEndpointId(conn, 'to')
-            if (!fromId || !toId) return false
-            return !!resolveNode(fromId) && !!resolveNode(toId)
-        })
-        return before - connections.value.length
     }
 
     function updateTrackGaugeEfficiency(trackId, value) {
@@ -474,7 +384,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     const cursorPosition = ref({ x: 0, y: 0 })
     const snapStep = ref(0.1)
     const draggingSkillData = ref(null)
-    const selectedConnectionId = ref(null)
     const selectedActionId = ref(null)
     const selectedLibrarySkillId = ref(null)
     const selectedLibrarySource = ref('character')
@@ -502,13 +411,15 @@ export const useTimelineStore = defineStore('timeline', () => {
     const historyIndex = ref(-1)
     const MAX_HISTORY = 50
 
+    /**
+     * 修改点 4: 更新 commitState
+     */
     function commitState() {
         if (historyIndex.value < historyStack.value.length - 1) {
             historyStack.value = historyStack.value.slice(0, historyIndex.value + 1)
         }
         const snapshot = JSON.stringify({
             tracks: tracks.value,
-            connections: connections.value,
             prepDuration: prepDuration.value,
             prepExpanded: prepExpanded.value,
             cycleBoundaries: cycleBoundaries.value,
@@ -534,13 +445,15 @@ export const useTimelineStore = defineStore('timeline', () => {
         restoreState(JSON.parse(historyStack.value[historyIndex.value]))
     }
 
+    /**
+     * 修改点 4: 更新 restoreState
+     */
     function restoreState(snapshot) {
         const rawPrep = Number(snapshot?.prepDuration)
         if (snapshot?.prepDuration !== undefined && Number.isFinite(rawPrep) && rawPrep < MIN_PREP_DURATION) {
             shiftSnapshotTimes(snapshot, MIN_PREP_DURATION - rawPrep)
         }
         tracks.value = normalizeTracks(snapshot.tracks)
-        connections.value = normalizeConnections(snapshot.connections)
         if (snapshot.prepDuration !== undefined) prepDuration.value = Math.max(MIN_PREP_DURATION, Number(snapshot.prepDuration) || 0)
         if (snapshot.prepExpanded !== undefined) prepExpanded.value = snapshot.prepExpanded !== false
         cycleBoundaries.value = snapshot.cycleBoundaries || []
@@ -548,10 +461,12 @@ export const useTimelineStore = defineStore('timeline', () => {
         clearSelection()
     }
 
+    /**
+     * 修改点 4: 更新 _createSnapshot
+     */
     function _createSnapshot() {
         return JSON.parse(JSON.stringify({
             tracks: tracks.value,
-            connections: connections.value,
             prepDuration: prepDuration.value,
             prepExpanded: prepExpanded.value,
             systemConstants: systemConstants.value,
@@ -560,12 +475,14 @@ export const useTimelineStore = defineStore('timeline', () => {
         }))
     }
 
+    /**
+     * 修改点 4: 更新 _loadSnapshot
+     */
     function _loadSnapshot(data) {
         if (!data) return
         const normalized = normalizePrepConfig(JSON.parse(JSON.stringify(data)))
         const incoming = normalized.snapshot
         tracks.value = normalizeTracks(incoming.tracks || createDefaultTracks())
-        connections.value = normalizeConnections(JSON.parse(JSON.stringify(incoming.connections || [])))
         normalizeComboLinksInTracks()
         prepDuration.value = Math.max(MIN_PREP_DURATION, Number(incoming.prepDuration) || 0)
         prepExpanded.value = incoming.prepExpanded !== false
@@ -573,32 +490,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         cycleBoundaries.value = incoming.cycleBoundaries ? JSON.parse(JSON.stringify(incoming.cycleBoundaries)) : []
         switchEvents.value = incoming.switchEvents ? JSON.parse(JSON.stringify(incoming.switchEvents)) : []
         clearSelection()
-    }
-
-    const enableConnectionTool = ref(false)
-    const validConnectionTargetIds = ref(new Set())
-    const connectionDragState = ref({
-        isDragging: false,
-        mode: 'create',
-        sourceId: null,
-        existingConnectionId: null,
-        startPoint: { x: 0, y: 0 },
-        sourcePort: 'right',
-    })
-    const connectionSnapState = ref({ isActive: false, targetId: null, targetPort: null, snapPos: null })
-
-    function toggleConnectionTool() { enableConnectionTool.value = !enableConnectionTool.value }
-    function createConnection(fromPortDir, targetPortDir, isConsumption = false, connectionData) {
-        const newConn = normalizeConnection({
-            id: `conn_${uid()}`,
-            isConsumption,
-            sourcePort: fromPortDir || 'right',
-            targetPort: targetPortDir || 'left',
-            ...connectionData
-        })
-        if (!newConn) return
-        connections.value.push(newConn)
-        commitState()
     }
 
     function switchScenario(targetId) {
@@ -620,7 +511,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         const newId = `sc_${uid()}`
         const emptySnapshot = {
             tracks: createDefaultTracks(),
-            connections: [],
             prepDuration: 5,
             prepExpanded: true,
             systemConstants: { ...DEFAULT_SYSTEM_CONSTANTS }
@@ -728,7 +618,17 @@ export const useTimelineStore = defineStore('timeline', () => {
     function setTimelineShift(v) { timelineShift.value = Math.min(Math.max(0, v), totalTimelineWidthPx.value - timelineRect.value.width) }
     function selectTrack(tid) { activeTrackId.value = tid; clearSelection() }
     function selectAction(id) { const same = id === selectedActionId.value; clearSelection(); if (!same) { selectedActionId.value = id; multiSelectedIds.value.add(id) } }
-    function clearSelection() { selectedActionId.value = selectedConnectionId.value = selectedAnomalyId.value = selectedCycleBoundaryId.value = selectedSwitchEventId.value = null; multiSelectedIds.value.clear(); selectedLibrarySkillId.value = null; selectedLibrarySource.value = 'character' }
+    
+    /**
+     * 修改点 3: 更新 clearSelection
+     */
+    function clearSelection() { 
+        selectedActionId.value = selectedAnomalyId.value = selectedCycleBoundaryId.value = selectedSwitchEventId.value = null; 
+        multiSelectedIds.value.clear(); 
+        selectedLibrarySkillId.value = null; 
+        selectedLibrarySource.value = 'character' 
+    }
+
     function normalizeComboLinksInTracks() {
         const groups = new Map(); tracks.value.forEach(t => t.actions.forEach(a => { if (a.comboGroupId) { if (!groups.has(a.comboGroupId)) groups.set(a.comboGroupId, []); groups.get(a.comboGroupId).push(a) } }))
         groups.forEach(actions => {
@@ -756,6 +656,9 @@ export const useTimelineStore = defineStore('timeline', () => {
         commitState()
     }
 
+    /**
+     * 修改点 5: 更新 removeCurrentSelection
+     */
     function removeCurrentSelection() {
         const targets = new Set(multiSelectedIds.value); if (selectedActionId.value) targets.add(selectedActionId.value)
         targets.forEach(id => { const a = getActionById(id)?.node; if (a?.comboGroupId && a.comboLinked !== false) tracks.value.forEach(t => t.actions.forEach(x => { if (x.comboGroupId === a.comboGroupId) targets.add(x.instanceId) })) })
@@ -763,7 +666,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         if (selectedSwitchEventId.value) switchEvents.value = switchEvents.value.filter(s => s.id !== selectedSwitchEventId.value)
         if (selectedCycleBoundaryId.value) cycleBoundaries.value = cycleBoundaries.value.filter(b => b.id !== selectedCycleBoundaryId.value)
         tracks.value.forEach(t => { t.actions = t.actions.filter(a => !targets.has(a.instanceId)) })
-        connections.value = connections.value.filter(c => !targets.has(c.from) && !targets.has(c.to)); pulls.sort((a, b) => b.time - a.time).forEach(p => pullSubsequentActions(p.time, p.amount))
+        pulls.sort((a, b) => b.time - a.time).forEach(p => pullSubsequentActions(p.time, p.amount))
         clearSelection(); commitState()
     }
 
@@ -788,8 +691,11 @@ export const useTimelineStore = defineStore('timeline', () => {
         return rects
     })
 
+    /**
+     * 修改点 5: 更新 effectLayouts
+     */
     const effectLayouts = computed(() => {
-        const layouts = new Map(); const consumption = new Map(); connections.value.forEach(c => { if (c.isConsumption) consumption.set(c.fromEffectId || c.fromNodeId, c) })
+        const layouts = new Map();
         const SIZE = 20; const MARGIN = 2; const VGAP = 3; const BORDER = 2
         actionMap.value.forEach(action => {
             const aRect = nodeRects.value[action.id]?.rect; if (!aRect || !action.node.physicalAnomaly) return
@@ -798,11 +704,9 @@ export const useTimelineStore = defineStore('timeline', () => {
                 const eid = ensureEffectId(eff); const mid = flatIdx++; const start = getShiftedEndTime(action.node.startTime, eff.offset || 0, action.id)
                 const left = timeToPx(start); const relY = (ri * (VGAP + SIZE)) + VGAP + BORDER
                 const iconRect = { left: left + 1, width: SIZE, right: left + 1 + SIZE, height: SIZE, top: aRect.top - relY - SIZE + BORDER }
-                let dur = getShiftedEndTime(start, eff.duration, action.id) - start; let isC = false; const conn = consumption.get(eid) || consumption.get(`${action.id}_${mid}`)
-                if (conn) { const tAct = tracks.value.find(t => t.actions.some(a => a.instanceId === conn.to))?.actions.find(a => a.instanceId === conn.to); if (tAct) { const cut = snapMs(tAct.startTime - (conn.consumptionOffset || 0) - start); if (cut >= 0) { dur = Math.min(dur, cut); isC = true } } }
+                let dur = getShiftedEndTime(start, eff.duration, action.id) - start;
                 const bWidth = dur > 0 ? Math.max(0, timeToPx(start + dur) - timeToPx(start) - SIZE - MARGIN) : 0
-                layouts.set(eid, { rect: iconRect, localTransform: `translate(${left - aRect.left}px, ${-relY}px)`, barData: { width: bWidth, isConsumed: isC, displayDuration: dur, extensionAmount: snapMs(dur - eff.duration) }, data: eff, actionId: action.id, flatIndex: mid })
-                if (isC) layouts.set(`${eid}_transfer`, { rect: { left: iconRect.left + SIZE + MARGIN + bWidth, width: 0, right: iconRect.left + SIZE + MARGIN + bWidth, height: SIZE, top: iconRect.top } })
+                layouts.set(eid, { rect: iconRect, localTransform: `translate(${left - aRect.left}px, ${-relY}px)`, barData: { width: bWidth, isConsumed: false, displayDuration: dur, extensionAmount: snapMs(dur - eff.duration) }, data: eff, actionId: action.id, flatIndex: mid })
             }))
         })
         return layouts
@@ -868,7 +772,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         }
     }
 
-    // --- 补充缺失的 UI 与状态管理方法 ---
     function setSelectedAnomalyId(id) { selectedAnomalyId.value = id }
     function setHoveredAction(id) { hoveredActionId.value = id }
     function nudgeSelection(dir) { /* stub */ }
@@ -893,17 +796,20 @@ export const useTimelineStore = defineStore('timeline', () => {
         contextMenu.value = { visible: true, x: evt.clientX, y: evt.clientY, targetId, clickTime }
     }
 
+    /**
+     * 修改点 6: 从导出对象移除 connections, toggleConnectionTool
+     */
     return {
         setTrackLaneRect, setTimelineRect, setScrollTop, contextMenu, closeContextMenu, openContextMenu,
         togglePrepExpanded, setCursorPosition, toggleCursorGuide, toggleBoxSelectMode, toggleSnapStep, toggleNewCompiler,
         
         MAX_SCENARIOS, toTimelineSpace, toViewportSpace, toGameTime, toRealTime,
-        systemConstants, isLoading, characterRoster, iconDatabase, tracks, connections, activeTrackId, timelineScrollTop, timelineShift, timelineRect, trackLaneRects, nodeRects, draggingSkillData,
+        systemConstants, isLoading, characterRoster, iconDatabase, tracks, activeTrackId, timelineScrollTop, timelineShift, timelineRect, trackLaneRects, nodeRects, draggingSkillData,
         selectedActionId, selectedLibrarySkillId, selectedLibrarySource, multiSelectedIds, clipboard, isCapturing, setIsCapturing, showCursorGuide, isBoxSelectMode, cursorPosTimeline, cursorCurrentTime, cursorPosition, snapStep,
         selectedAnomalyId, setSelectedAnomalyId, updateTrackGaugeEfficiency,
         teamTracksInfo, activeSkillLibrary, BASE_BLOCK_WIDTH, setBaseBlockWidth, formatTimeLabel, ZOOM_LIMITS, timeBlockWidth, ELEMENT_COLORS, getCharacterElementColor, isActionSelected, hoveredActionId, setHoveredAction,
         fetchGameData, TOTAL_DURATION, selectTrack, clearSelection, undo, redo, commitState, addSkillToTrack, removeCurrentSelection, updateAction,
-        getModifierLabel, getColor, toggleConnectionTool, nudgeSelection,
+        getModifierLabel, getColor, nudgeSelection,
         ENEMY_TIERS,
         scenarioList, activeScenarioId, switchScenario, addScenario, duplicateScenario, deleteScenario,
         effectLayouts, getActionById, getEffectById, prepDuration, prepExpanded, viewDuration, prepZoneWidthPx, totalTimelineWidthPx,
