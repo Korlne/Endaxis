@@ -228,7 +228,7 @@
     "track": {
       "changeOperatorTooltip": "点击更换干员",
       "operatorAlreadyInUse": "该干员已在另一条轨道上！",
-      "selectOperator": "请选择干员",
+      "selectOperator": "请选择代理人", 
       "selectWeaponTooltip": "选择武器",
       "setBonusActive": "已激活套装效果"
     },

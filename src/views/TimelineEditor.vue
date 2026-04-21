@@ -11,7 +11,6 @@ import { setLocale } from '@/i18n'
 import TimelineGrid from '../components/TimelineGrid.vue'
 import ActionLibrary from '../components/ActionLibrary.vue'
 import PropertiesPanel from '../components/PropertiesPanel.vue'
-import ResourceMonitor from '../components/ResourceMonitor.vue'
 
 import { addMetadataToPng, readMetadataFromPng } from '../utils/pngUtils.js'
 
@@ -602,7 +601,6 @@ onUnmounted(() => {
 
       <div class="timeline-workspace">
         <div class="timeline-grid-container"><TimelineGrid/></div>
-        <div class="resource-monitor-panel"><ResourceMonitor/></div>
 
         <div class="export-watermark" ref="watermarkEl">
           Endaxis
@@ -723,7 +721,6 @@ onUnmounted(() => {
 /* Workspace & Panels */
 .timeline-workspace { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
 .timeline-grid-container { flex-grow: 1; overflow: hidden; min-height: 0; }
-.resource-monitor-panel { height: 200px; flex-shrink: 0; border-top: 1px solid #444; z-index: 20; background: #252525; }
 
 /* Loading */
 .loading-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #18181c; z-index: 9999; display: flex; align-items: center; justify-content: center; color: #888; font-size: 14px; }
@@ -740,7 +737,7 @@ onUnmounted(() => {
   width: 100%;
 }
 .form-item label { display: block; margin-bottom: 8px; font-weight: bold; color: #ccc; }
-.hint { font-size: 12px; color: #888; margin-top: 6px; }
+.hint { font-size: 12px; color: #888; margin-top: 66px; }
 
 .share-import-container {
   display: flex;

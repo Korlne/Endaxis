@@ -276,8 +276,12 @@ export const useTimelineStore = defineStore('timeline', () => {
      * 修改点 1: 轨道初始化单轨化
      */
     const createDefaultTracks = () => [
-        createEmptyTrack()
+        createEmptyTrack(), // 代理人 1
+        createEmptyTrack(), // 代理人 2
+        createEmptyTrack(), // 代理人 3
+        createEmptyTrack()  // 邦布
     ]
+
 
     const tracks = ref(createDefaultTracks())
     const characterOverrides = ref({})
