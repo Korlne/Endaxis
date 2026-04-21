@@ -209,10 +209,10 @@
     },
     "operatorDialog": {
       "clearTrack": "清空当前轨道",
-      "empty": "没有找到匹配的干员",
+      "empty": "没有找到匹配的代理人",
       "inTeam": "已上场",
-      "searchPlaceholder": "搜索干员名称...",
-      "title": "更换干员"
+      "searchPlaceholder": "搜索代理人名称...",
+      "title": "更换代理人"
     },
     "selection": {
       "deleted": "已删除",
@@ -226,8 +226,8 @@
       "snapPrecision": "吸附精度 (Alt+S)"
     },
     "track": {
-      "changeOperatorTooltip": "点击更换干员",
-      "operatorAlreadyInUse": "该干员已在另一条轨道上！",
+      "changeOperatorTooltip": "点击更换代理人",
+      "operatorAlreadyInUse": "该代理人已在另一条轨道上！",
       "selectOperator": "请选择代理人", 
       "selectWeaponTooltip": "选择武器",
       "setBonusActive": "已激活套装效果"
@@ -243,11 +243,11 @@
   "actionLibrary": {
     "fallback": {
       "noEquip": "未装备",
-      "noOperator": "未选择干员",
+      "noOperator": "未选择代理人",
       "noWeapon": "未装备武器"
     },
     "panels": {
-      "operatorStats": "干员数值",
+      "operatorStats": "zzz的代理人特性",
       "weaponStats": "武器数值",
       "equipmentRefine": "装备精锻"
     },
@@ -268,7 +268,7 @@
     "section": {
       "weaponBuffLibrary": "武器 BUFF 库",
       "setBuffLibrary": "套装 BUFF 库",
-      "operatorSkillLibrary": "干员技能库"
+      "operatorSkillLibrary": "代理人技能库"
     },
     "hints": {
       "noRefineNon70": "非 Lv70 无精锻",
@@ -280,7 +280,7 @@
       "equipment": "装备"
     },
     "tabs": {
-      "operator": "干员",
+      "operator": "代理人",
       "set": "装备",
       "setNeedEquip": "需要先装备任意装备",
       "weapon": "武器",

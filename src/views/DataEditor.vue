@@ -179,6 +179,19 @@ function deleteCurrentCharacter() {
   }).catch(() => {})
 }
 
+function addVariant() {
+  if (!selectedChar.value) return
+  if (!Array.isArray(selectedChar.value.variants)) selectedChar.value.variants = []
+  selectedChar.value.variants.push({
+    id: `var_${Date.now()}`,
+    name: '自定义动作名称',
+    type: 'variant',
+    duration: 1,
+    hit_ticks: [],
+    cancel_windows: []
+  })
+}
+
 // === 数据持久化 ===
 
 function normalizeCharacterForSave(char) {
@@ -225,6 +238,18 @@ function normalizeCharacterForSave(char) {
   delete char.attack_allowed_types
   delete char.attack_anomalies
   delete char.attack_damage_ticks
+
+  if (Array.isArray(char.variants)) {
+    for (const v of char.variants) {
+      v.duration = Number(v.duration) || 0
+      if (!Array.isArray(v.hit_ticks)) v.hit_ticks = []
+      v.hit_ticks = v.hit_ticks.map(n => Number(n) || 0)
+      if (!Array.isArray(v.cancel_windows)) v.cancel_windows = []
+      for (const cw of v.cancel_windows) {
+        cw.time = Number(cw.time) || 0
+      }
+    }
+  }
 }
 
 function saveData() {
@@ -243,6 +268,7 @@ watch(selectedCharId, () => {
   if (!selectedChar.value) return
   ensureAttackSegments(selectedChar.value)
   ensureLinkSegments(selectedChar.value)
+  if (!Array.isArray(selectedChar.value.variants)) selectedChar.value.variants = []
 }, { immediate: true })
 
 </script>
@@ -371,6 +397,41 @@ watch(selectedCharId, () => {
                   <div class="form-group"><label>Swap Cancel</label><input type="number" :value="selectedChar[`${activeTab}_cancel_windows`]?.swap || 0" @input="e => { if(!selectedChar[`${activeTab}_cancel_windows`]) selectedChar[`${activeTab}_cancel_windows`] = {combo:0, dodge:0, skill:0, swap:0}; selectedChar[`${activeTab}_cancel_windows`].swap = Number(e.target.value) }"></div>
                 </div>
               </template>
+            </div>
+          </div>
+
+          <div v-show="activeTab === 'variants'">
+            <div class="form-section">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin: 25px 0 15px;">
+                <h3 class="section-title" style="margin: 0;">变体与自定义动作</h3>
+                <button class="ea-btn ea-btn--sm ea-btn--fill-success" @click="addVariant">+ 添加变体</button>
+              </div>
+              <div v-for="(v, vIdx) in selectedChar.variants" :key="v.id" style="border: 1px solid #333; padding: 15px; border-radius: 4px; margin-bottom: 15px; background: #1a1a1c;">
+                <div class="form-grid four-col">
+                  <div class="form-group"><label>自定义动作名称</label><input type="text" v-model="v.name"></div>
+                  <div class="form-group"><label>持续时间 (秒)</label><input type="number" step="0.01" v-model.number="v.duration"></div>
+                  <div class="form-group full-width"><label>Hit Ticks (用逗号分隔)</label>
+                    <input type="text" :value="(v.hit_ticks || []).join(', ')" @change="e => v.hit_ticks = e.target.value.split(',').map(n => Number(n.trim())).filter(n => !isNaN(n))">
+                  </div>
+                </div>
+                <div style="margin-top: 15px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <label style="color: #aaa; font-size: 12px;">取消窗口 (Cancel Windows)</label>
+                    <button class="ea-btn ea-btn--sm ea-btn--outline-muted" @click="v.cancel_windows.push({name: '新窗口', time: 0})">添加窗口</button>
+                  </div>
+                  <div v-for="(cw, cwIdx) in v.cancel_windows" :key="cwIdx" style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center;">
+                    <input type="text" v-model="cw.name" placeholder="窗口名称 (如 dodge)" style="background: #16161a; border: 1px solid #333; color: #fff; padding: 6px; flex: 1; border-radius: 4px;">
+                    <input type="number" step="0.01" v-model.number="cw.time" placeholder="数值/帧数" style="background: #16161a; border: 1px solid #333; color: #fff; padding: 6px; width: 120px; border-radius: 4px;">
+                    <button class="ea-btn ea-btn--sm ea-btn--fill-danger" @click="v.cancel_windows.splice(cwIdx, 1)">删除</button>
+                  </div>
+                </div>
+                <div style="text-align: right; margin-top: 10px;">
+                  <button class="ea-btn ea-btn--sm ea-btn--fill-danger" @click="selectedChar.variants.splice(vIdx, 1)">删除此变体</button>
+                </div>
+              </div>
+              <div v-if="!selectedChar.variants || selectedChar.variants.length === 0" style="color: #666; font-size: 12px; text-align: center; padding: 20px;">
+                暂无自定义变体动作
+              </div>
             </div>
           </div>
         </div>

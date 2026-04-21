@@ -15,11 +15,11 @@ export async function executeSave(actionTimelineData) {
         const blob = new Blob([jsonData], { type: 'application/json' })
         const link = document.createElement('a')
         link.href = URL.createObjectURL(blob)
-        link.download = 'ZZZaxis_Timeline.json'
+        link.download = 'gamedata.json'
         link.click()
         URL.revokeObjectURL(link.href)
 
-        ElMessage.success('ZZZaxis_Timeline.json 已生成')
+        ElMessage.success('gamedata.json 已生成')
     } catch (e) {
         console.error(e)
         ElMessage.error('导出失败')
