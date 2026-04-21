@@ -97,26 +97,24 @@ function moveTrackDown(index) { if (index < store.tracks.length - 1) store.moveT
 const isSelectorVisible = ref(false)
 const targetTrackIndex = ref(null)
 const searchQuery = ref('')
-const filterElement = ref('ALL')
+const filterCharacteristic = ref('ALL')
 
 const isGameTimeCollapsed = ref(true)
 const showGameTime = computed(() => !isGameTimeCollapsed.value || store.isCapturing)
 const gridRowHeight = computed(() => showGameTime.value ? '60px' : '48px')
 
-const ELEMENT_FILTERS = computed(() => {
-  locale.value
-  return [
-    { label: t('timelineGrid.elementFilter.all'), value: 'ALL', color: '#888' },
-    { label: t('timelineGrid.elementFilter.physical'), value: 'physical', color: '#e0e0e0' },
-    { label: t('timelineGrid.elementFilter.blaze'), value: 'blaze', color: '#ff4d4f' },
-    { label: t('timelineGrid.elementFilter.cold'), value: 'cold', color: '#00e5ff' },
-    { label: t('timelineGrid.elementFilter.emag'), value: 'emag', color: '#ffd700' },
-    { label: t('timelineGrid.elementFilter.nature'), value: 'nature', color: '#52c41a' }
-  ]
-})
+const CHARACTERISTIC_FILTERS = computed(() => [
+  { label: '全部', value: 'ALL' },
+  { label: '强攻', value: 'Attack' },
+  { label: '击破', value: 'Break' },
+  { label: '异常', value: 'Anomaly' },
+  { label: '支援', value: 'Support' },
+  { label: '防护', value: 'Defense' },
+  { label: '命破', value: 'Rupture' }
+])
 
 function openCharacterSelector(index) {
-  targetTrackIndex.value = index; searchQuery.value = ''; filterElement.value = 'ALL'; isSelectorVisible.value = true
+  targetTrackIndex.value = index; searchQuery.value = ''; filterCharacteristic.value = 'ALL'; isSelectorVisible.value = true
 }
 
 function confirmCharacterSelection(charId) {
@@ -131,7 +129,9 @@ function removeOperator() {
 
 const filteredListFlat = computed(() => {
   let list = store.characterRoster || []
-  if (filterElement.value !== 'ALL') list = list.filter(c => c.element === filterElement.value)
+  if (filterCharacteristic.value !== 'ALL') {
+    list = list.filter(c => c.characteristic === filterCharacteristic.value)
+  }
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(c => c.name.toLowerCase().includes(q))
@@ -237,7 +237,6 @@ const rawDynamicTicks = computed(() => {
   const viewWindow = getViewWindow({ bufferPx: 100 })
   const realTicks = []
 
-  // 动态步长逻辑
   let subDivision = 1
   if (width >= 800) subDivision = 60
   else if (width >= 200) subDivision = 10
@@ -288,7 +287,7 @@ const rawDynamicTicks = computed(() => {
   return { realTicks }
 })
 
-const dynamicTicks = refThrottled(rawDynamicTicks, 100)
+const dynamicTicks = rawDynamicTicks
 
 // ===================================================================================
 // 基础 UI 逻辑
@@ -343,36 +342,6 @@ const currentStaggerValue = computed(() => {
   return Math.floor(points[points.length - 1].val)
 })
 
-function getStepPointAtTime(points, time) {
-  if (!points?.length) return null
-  let lo = 0, hi = points.length - 1
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1
-    if ((Number(points[mid].time) || 0) <= time) lo = mid + 1; else hi = mid - 1
-  }
-  return points[Math.max(0, hi)]
-}
-
-function toMutedRgba(color, alpha = 0.78) {
-  let hex = String(color || '').trim().replace('#', '')
-  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('')
-  if (hex.length !== 6) return `rgba(255,255,255,${alpha})`
-  const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16)
-  return `rgba(${r},${g},${b},${alpha})`
-}
-
-const cursorGaugeRows = computed(() => {
-  const time = Math.round(store.cursorCurrentTime), rows = []
-  for (const track of store.teamTracksInfo) {
-    if (!track?.id) continue
-    const points = store.gaugeSeriesByTrackId.get(track.id) || []
-    const val = Math.round(getStepPointAtTime(points, time)?.val ?? 0), max = store.getTrackGaugeMax(track.id)
-    const isFull = max > 0 && val >= max - 1e-9, baseColor = store.getCharacterElementColor(track.id)
-    rows.push({ id: track.id, name: track.name, isFull, color: toMutedRgba(baseColor, isFull ? 1 : 0.78), val, max })
-  }
-  return rows
-})
-
 function onGridMouseMove(evt) { store.setCursorPosition(evt.clientX, evt.clientY); isCursorVisible.value = true }
 function onGridMouseLeave() { isCursorVisible.value = false }
 
@@ -420,7 +389,7 @@ function adjustZoom(delta, anchorTime = null) {
   if (anchorTime === null) anchorTime = store.pxToTime(store.timelineShift + store.timelineRect.width / 2)
   const offset = store.timeToPx(anchorTime) - store.timelineShift
   store.setBaseBlockWidth(oldWidth + delta)
-  nextTick(() => store.setTimelineShift(store.timeToPx(anchorTime) - offset))
+  store.setTimelineShift(store.timeToPx(anchorTime) - offset)
 }
 
 function handleWheel(e) { if (e.ctrlKey) { e.preventDefault(); adjustZoom(e.deltaY < 0 ? Math.round(store.timeBlockWidth * 0.15) : -Math.round(store.timeBlockWidth * 0.15), store.cursorCurrentTime) } }
@@ -531,9 +500,6 @@ onMounted(() => {
             <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 4"/><path d="M8 12h8" stroke-width="1.5"/><path d="M12 8v8" stroke-width="1.5"/></svg>
           </button>
           <button class="mini-tool-btn is-active"><span class="btn-text">1 Tick</span></button>
-          <button class="mini-tool-btn" :class="{ 'is-active': store.useNewCompiler }" @click="store.toggleNewCompiler">
-            <span class="btn-text">{{ store.useNewCompiler ? t('common.new') : t('common.old') }}</span>
-          </button>
         </div>
       </div>
     </div>
@@ -572,11 +538,7 @@ onMounted(() => {
     <div class="tracks-content-viewport" ref="tracksContentRef" @mousedown="onContentMouseDown" @wheel="handleTrackWheel" @mousemove="onGridMouseMove" @mouseleave="onGridMouseLeave" @contextmenu.prevent="store.openContextMenu($event, null, Math.max(0, Math.round(store.pxToTime(store.toTimelineSpace($event.clientX, $event.clientY).x))))">
       <div class="tracks-content-scroller" :style="transformStyle">
         <div v-if="store.showCursorGuide && !store.isBoxSelectMode" class="cursor-guide" :style="{ transform: `translateX(${store.cursorPosTimeline.x}px)` }" v-show="isCursorVisible">
-          <div class="guide-time-label">{{ Math.round(store.cursorCurrentTime) }}t</div>
-          <div class="guide-sp-label">SP: {{ currentSpValue }}</div>
-          <div v-if="cursorGaugeRows.length" class="guide-gauge-panel">
-            <div v-for="row in cursorGaugeRows" :key="row.id" class="guide-gauge-grid-row"><span :style="{ color: row.color }">{{ row.name }}</span><span>{{ row.val }}/{{ row.max }}</span></div>
-          </div>
+          <div class="guide-time-label">{{ Math.trunc(Math.round(store.cursorCurrentTime) / 60) }}s {{ Math.abs(Math.round(store.cursorCurrentTime) % 60) }}t</div>
         </div>
         <div v-for="boundary in store.cycleBoundaries" :key="boundary.id" class="cycle-guide" :class="{ 'is-selected': boundary.id === store.selectedCycleBoundaryId }" :style="{ left: `${store.timeToPx(boundary.time)}px` }" @mousedown="onCycleLineMouseDown($event, boundary.id)"></div>
         <div v-if="isBoxSelecting" class="selection-box-overlay" :style="{ left: `${boxRect.left}px`, top: `${boxRect.top}px`, width: `${boxRect.width}px`, height: `${boxRect.height}px` }"></div>
@@ -600,7 +562,7 @@ onMounted(() => {
         <el-input v-model="searchQuery" :prefix-icon="Search" clearable style="width: 200px" />
         <button class="ea-btn ea-btn--glass-cut-danger" @click="removeOperator">{{ t('common.unequip') }}</button>
         <div class="element-filters">
-          <button v-for="elm in ELEMENT_FILTERS" :key="elm.value" class="ea-btn ea-btn--glass-cut" :class="{ 'is-active': filterElement === elm.value }" @click="filterElement = elm.value">{{ elm.label }}</button>
+          <button v-for="cls in CHARACTERISTIC_FILTERS" :key="cls.value" class="ea-btn ea-btn--glass-cut" :class="{ 'is-active': filterCharacteristic === cls.value }" @click="filterCharacteristic = cls.value">{{ cls.label }}</button>
         </div>
       </div>
       <div class="roster-scroll-container">
