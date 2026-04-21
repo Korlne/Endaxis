@@ -155,7 +155,7 @@ function getRarityBaseColor(rarity) {
 }
 
 // ===================================================================================
-// 核心逻辑：操作轴与刻度
+// 核心逻辑：操作轴与刻度 (高性能版)
 // ===================================================================================
 
 const operationMarkers = computed(() => {
@@ -213,44 +213,79 @@ const operationMarkers = computed(() => {
 })
 
 function getViewWindow({ bufferPx = 0 } = {}) {
-  const totalPx = store.totalTimelineWidthPx; const totalSeconds = store.viewDuration
-  if (!tracksContentRef.value || store.isCapturing) return { startPx: 0, endPx: totalPx, startTime: 0, endTime: totalSeconds }
-  const startPx = Math.max(store.timelineShift - bufferPx, 0)
-  const endPx = Math.min(store.timelineShift + store.timelineRect.width + bufferPx, totalPx)
-  return { startPx, endPx, startTime: store.pxToTime(startPx), endTime: store.pxToTime(endPx) }
+  const totalPx = store.totalTimelineWidthPx
+  const totalSeconds = store.viewDuration
+  
+  if (!store.timelineRect.width || store.isCapturing) {
+    return { startPx: 0, endPx: totalPx, startTime: 0, endTime: totalSeconds }
+  }
+
+  const scrollLeft = store.timelineShift
+  const timelineWidth = store.timelineRect.width
+  const startPx = Math.max(scrollLeft - bufferPx, 0)
+  const endPx = Math.min(scrollLeft + timelineWidth + bufferPx, totalPx)
+
+  return {
+    startPx, endPx,
+    startTime: store.pxToTime(startPx),
+    endTime: store.pxToTime(endPx)
+  }
 }
 
 const rawDynamicTicks = computed(() => {
   const width = TIME_BLOCK_WIDTH.value
   const viewWindow = getViewWindow({ bufferPx: 100 })
-  const realTicks = [], gameTicks = []
+  const realTicks = []
 
-  const startTick = Math.max(0, Math.floor(viewWindow.startTime * 60))
-  const endTick = Math.ceil(viewWindow.endTime * 60)
-  const pixelsPerTick = width / 60
-  
-  let skip = 1
-  if (pixelsPerTick < 2) skip = 2
-  if (pixelsPerTick < 1) skip = 5
-  if (pixelsPerTick < 0.4) skip = 10
+  // 动态步长逻辑
+  let subDivision = 1
+  if (width >= 800) subDivision = 60
+  else if (width >= 200) subDivision = 10
+  else if (width >= 100) subDivision = 2
 
-  for (let t = startTick; t <= endTick; t++) {
-    const isMajor = t % 60 === 0
-    const isMinor = t % 10 === 0
-    if (!isMajor && t % skip !== 0) continue
+  const startStep = Math.floor(viewWindow.startTime * subDivision)
+  const endStep = Math.ceil(viewWindow.endTime * subDivision)
 
-    let label = ''
-    if (isMajor) label = `${t / 60}s`
-    else if (pixelsPerTick > 10 && isMinor) label = `${t}t`
+  for (let i = startStep; i <= endStep; i++) {
+    const time = i / subDivision
+    if (time < 0) continue
 
-    realTicks.push({
-      time: t / 60,
-      type: isMajor ? 'major' : (isMinor ? 'tenth' : 'frame'),
-      label: label,
-      x: store.timeToPx(t / 60)
-    })
+    let type = '', label = ''
+    const isIntegerSecond = i % subDivision === 0
+
+    if (isIntegerSecond) {
+      const secondValue = Math.round(time)
+      const isFiveSec = secondValue % 5 === 0
+      if (width >= 100 || isFiveSec) {
+        type = 'major'; label = `${secondValue}s`
+      } else {
+        type = 'major-dim'
+      }
+    } else {
+      if (subDivision === 2) {
+        type = 'tenth'
+      } else if (subDivision === 10) {
+        type = 'tenth'
+        if (width >= 500) label = `.${Math.round((time % 1) * 10)}`
+      } else if (subDivision === 60) {
+        const frameIdx = i % 60
+        if (frameIdx % 10 === 0 && frameIdx !== 0) {
+          type = 'tenth'
+          if (width >= 600) label = `${frameIdx}f`
+        } else if (frameIdx % 2 === 0) {
+          type = 'frame'
+        } else {
+          if (width < 1000) continue
+          type = 'frame'
+        }
+      } else {
+        continue
+      }
+    }
+
+    realTicks.push({ time, type, label, x: store.timeToPx(time) })
   }
-  return { realTicks, gameTicks }
+  return { realTicks }
 })
 
 const dynamicTicks = refThrottled(rawDynamicTicks, 100)
@@ -601,7 +636,7 @@ onMounted(() => {
 .mini-tool-btn { height: 18px; padding: 0 4px; background: #2b2b2b; border: 1px solid #555; color: #888; cursor: pointer; border-radius: 2px; font-size: 9px; display: flex; align-items: center; gap: 2px; }
 .mini-tool-btn.is-active { color: #ffd700; border-color: #ffd700; background: rgba(255, 215, 0, 0.05); }
 
-.tracks-header-sticky { grid-column: 1 / 2; grid-row: 2 / 3; background: #3a3a3a; border-right: 1px solid #444; overflow: hidden; }
+.tracks-header-sticky { grid-column: 1 / 2; grid-row: 2 / 3; background: #3a3a3a; border-right: 1px solid #444; overflow: hidden; padding-top: 20px;}
 .track-info { min-height: 110px; display: flex; align-items: center; padding-left: 8px; border-bottom: 1px solid #444; transition: background 0.2s; }
 .track-info.is-active { background: #4a5a6a; }
 
@@ -613,11 +648,17 @@ onMounted(() => {
 .track-lane { position: relative; height: 50px; background: rgba(255, 255, 255, 0.02); }
 
 .time-ruler-track { position: relative; height: 36px; border-bottom: 1px solid #444; background: #222; }
-.tick-line { position: absolute; bottom: 0; width: 1px; background: #555; }
-.tick-line.major { height: 14px; background: #888; }
-.tick-line.tenth { height: 8px; background: #666; }
+.tick-line { position: absolute; bottom: 0; width: 1px; background: #444; pointer-events: none; }
+.tick-line.major { height: 16px; background: #888; }
+.tick-line.major-dim { height: 12px; background: #555; }
+.tick-line.tenth { height: 8px; background: #555; }
 .tick-line.frame { height: 4px; background: #444; }
-.tick-label { position: absolute; bottom: 16px; left: 4px; font-size: 10px; color: #aaa; white-space: nowrap; font-family: monospace; }
+
+.tick-label { 
+  position: absolute; bottom: 18px; left: 3px; font-size: 10px; color: #aaa; 
+  white-space: nowrap; font-family: 'Roboto Mono', monospace; 
+}
+.major .tick-label { color: #e0e0e0; font-weight: bold; }
 
 .cursor-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: #ffd700; z-index: 50; pointer-events: none; }
 .guide-time-label { position: absolute; top: 2px; left: 4px; background: #ffd700; color: #000; padding: 1px 4px; font-size: 10px; border-radius: 2px; font-weight: bold; }
