@@ -233,7 +233,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         const s = Math.floor(totalFrames / 60)
         const f = totalFrames % 60
         if (f === 0) return `${sign}${s}s`
-        return `${sign}${s}s ${f.toString().padStart(2, '0')}f`
+        return `${sign}${s}s ${f.toString().padStart(2, '0')}t`
     }
 
     const ELEMENT_COLORS = {

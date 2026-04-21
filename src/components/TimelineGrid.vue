@@ -4,7 +4,6 @@ import { refThrottled } from '@vueuse/core'
 import { useTimelineStore } from '../stores/timelineStore.js'
 import ActionItem from './ActionItem.vue'
 import GaugeOverlay from './GaugeOverlay.vue'
-import ContextMenu from './ContextMenu.vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
@@ -212,82 +211,128 @@ const operationMarkers = computed(() => {
   return finalMarkers
 })
 
+const totalWidthComputed = computed(() => store.totalTimelineWidthPx)
+const prepZoneWidthPxRounded = computed(() => Math.round(store.prepZoneWidthPx || 0))
+const transformStyle = computed(() => ({ transform: `translateX(${-store.timelineShift}px)`, willChange: 'transform' }))
+
 function getViewWindow({ bufferPx = 0 } = {}) {
-  const totalPx = store.totalTimelineWidthPx
-  const totalSeconds = store.viewDuration
-  
-  if (!store.timelineRect.width || store.isCapturing) {
+  const totalPx = store.totalTimelineWidthPx;
+  const totalSeconds = store.viewDuration;
+  if (!tracksContentRef.value || store.isCapturing) {
     return { startPx: 0, endPx: totalPx, startTime: 0, endTime: totalSeconds }
   }
-
-  const scrollLeft = store.timelineShift
-  const timelineWidth = store.timelineRect.width
-  const startPx = Math.max(scrollLeft - bufferPx, 0)
-  const endPx = Math.min(scrollLeft + timelineWidth + bufferPx, totalPx)
-
-  return {
-    startPx, endPx,
-    startTime: store.pxToTime(startPx),
-    endTime: store.pxToTime(endPx)
-  }
+  const timelineWidth = store.timelineRect.width;
+  const scrollLeft = store.timelineShift;
+  const startPx = Math.max(scrollLeft - bufferPx, 0);
+  const endPx = Math.min(scrollLeft + timelineWidth + bufferPx, totalPx);
+  return { startPx, endPx, startTime: store.pxToTime(startPx), endTime: store.pxToTime(endPx) }
 }
 
 const rawDynamicTicks = computed(() => {
-  const width = TIME_BLOCK_WIDTH.value
-  const viewWindow = getViewWindow({ bufferPx: 100 })
-  const realTicks = []
+  const width = TIME_BLOCK_WIDTH.value;
+  const viewWindow = getViewWindow({ bufferPx: 100 });
+  const prep = store.prepDuration || 0
+  const realStartVT = viewWindow.startTime;
+  const realEndVT = viewWindow.endTime;
+  const btStart = realStartVT - prep
+  const btEnd = realEndVT - prep
+  const gameStartVT = store.toGameTime ? store.toGameTime(realStartVT) : realStartVT;
+  const gameStartBT = gameStartVT - prep
 
-  let subDivision = 1
-  if (width >= 800) subDivision = 60
-  else if (width >= 200) subDivision = 10
-  else if (width >= 100) subDivision = 2
+  let subDivision = 1;
+  if (width >= 800) subDivision = 60;
+  else if (width >= 200) subDivision = 10;
+  else if (width >= 100) subDivision = 2;
 
-  const startStep = Math.floor(viewWindow.startTime * subDivision)
-  const endStep = Math.ceil(viewWindow.endTime * subDivision)
+  const minBtForTicks = (!store.prepExpanded && prep > 0) ? 0 : Math.min(btStart, gameStartBT)
+  const startStep = Math.floor(minBtForTicks * subDivision);
+  const endStep = Math.ceil(btEnd * subDivision);
+
+  const realTicks = [];
+  const gameTicks = [];
 
   for (let i = startStep; i <= endStep; i++) {
-    const time = i / subDivision
-    if (time < 0) continue
-
-    let type = '', label = ''
-    const isIntegerSecond = i % subDivision === 0
+    const bt = i / subDivision;
+    let type = '';
+    let label = '';
+    const isIntegerSecond = (i % subDivision === 0);
 
     if (isIntegerSecond) {
-      const secondValue = Math.round(time)
-      const isFiveSec = secondValue % 5 === 0
-      if (width >= 100 || isFiveSec) {
-        type = 'major'; label = `${secondValue}s`
+      const secondValue = Math.round(bt);
+      const isFiveSec = secondValue % 5 === 0;
+      const showAllLabels = width >= 100;
+      if (showAllLabels || isFiveSec) {
+        type = 'major';
+        label = `${secondValue}s`;
       } else {
-        type = 'major-dim'
+        type = 'major-dim';
       }
     } else {
       if (subDivision === 2) {
-        type = 'tenth'
+        type = 'tenth';
       } else if (subDivision === 10) {
-        type = 'tenth'
-        if (width >= 500) label = `.${Math.round((time % 1) * 10)}`
+        type = 'tenth';
+        if (width >= 500) label = `.${Math.round((bt % 1) * 10)}`;
       } else if (subDivision === 60) {
-        const frameIdx = i % 60
+        const frameIdx = i % 60;
         if (frameIdx % 10 === 0 && frameIdx !== 0) {
-          type = 'tenth'
-          if (width >= 600) label = `${frameIdx}f`
+          type = 'tenth';
+          if (width >= 600) label = `${frameIdx}f`;
         } else if (frameIdx % 2 === 0) {
-          type = 'frame'
+          type = 'frame';
         } else {
-          if (width < 1000) continue
-          type = 'frame'
+          if (width < 1000) continue;
+          type = 'frame';
         }
       } else {
-        continue
+        continue;
       }
     }
 
-    realTicks.push({ time, type, label, x: store.timeToPx(time) })
-  }
-  return { realTicks }
-})
+    const realVT = bt + prep
+    if (!store.prepExpanded && prep > 0 && bt < -0.0001) {
+      continue
+    }
+    const realX = store.timeToPx(realVT)
+    realTicks.push({ time: bt, type, label, x: realX });
 
-const dynamicTicks = rawDynamicTicks
+    const gameVT = bt + prep
+    const mappedRealVT = store.toRealTime ? store.toRealTime(gameVT) : gameVT;
+    if (mappedRealVT >= realStartVT && mappedRealVT <= realEndVT) {
+      gameTicks.push({ time: bt, type, label, x: store.timeToPx(mappedRealVT) });
+    }
+  }
+  return { realTicks, gameTicks };
+});
+
+const dynamicTicks = refThrottled(rawDynamicTicks, 100);
+
+const formatGuideTime = (viewTime) => {
+  const bt = viewTime - (store.prepDuration || 0)
+  const abs = Math.abs(bt)
+  const totalFrames = Math.round(abs * 60)
+  const s = Math.floor(totalFrames / 60)
+  const f = totalFrames % 60
+  const sign = bt < -0.001 ? '-' : ''
+  return `${sign}${s}s ${String(f).padStart(2, '0')}t`
+}
+
+const isPrepDurationEditorOpen = ref(false)
+const prepDurationDraft = ref('')
+const prepDurationInputRef = ref(null)
+
+function openPrepDurationEditor() {
+  prepDurationDraft.value = String(Number(store.prepDuration) || 0)
+  isPrepDurationEditorOpen.value = true
+  nextTick(() => prepDurationInputRef.value?.focus?.())
+}
+function closePrepDurationEditor() { isPrepDurationEditorOpen.value = false }
+function applyPrepDurationDraft() {
+  const v = Number(prepDurationDraft.value)
+  if (!Number.isFinite(v)) return
+  store.setPrepDuration(v)
+  closePrepDurationEditor()
+}
 
 // ===================================================================================
 // 基础 UI 逻辑
@@ -311,6 +356,7 @@ function onFakeScroll(e) {
   requestAnimationFrame(() => { ticking = false })
 }
 
+watch(() => store.timeBlockWidth, () => { nextTick(() => { forceSvgUpdate(); updateScrollbarHeight() }) })
 watch(() => store.timelineShift, (val) => { if (fakeScrollbarRef.value) fakeScrollbarRef.value.scrollLeft = val })
 watch(() => store.timelineScrollTop, (val) => {
   if (tracksHeaderRef.value) tracksHeaderRef.value.scrollTop = val
@@ -322,25 +368,6 @@ function syncVerticalScroll() { if (tracksContentRef.value) store.setScrollTop(t
 // ===================================================================================
 // 交互与拖拽
 // ===================================================================================
-
-const cachedSpData = computed(() => store.calculateGlobalSpData())
-const currentSpValue = computed(() => {
-  const time = store.cursorCurrentTime; const points = cachedSpData.value
-  if (!points?.length) return Math.floor(Number(store.systemConstants.initialSp) || 200)
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i], p2 = points[i+1]
-    if (time >= p1.time && time < p2.time) return Math.floor(p1.sp + (p2.sp - p1.sp) * ((time - p1.time) / (p2.time - p1.time)))
-  }
-  return Math.floor(points[points.length - 1].sp)
-})
-
-const cachedStaggerData = computed(() => store.calculateGlobalStaggerData().points)
-const currentStaggerValue = computed(() => {
-  const time = store.cursorCurrentTime; const points = cachedStaggerData.value
-  if (!points?.length) return 0
-  for (let i = 0; i < points.length - 1; i++) { if (time >= points[i].time && time < points[i+1].time) return Math.floor(points[i].val) }
-  return Math.floor(points[points.length - 1].val)
-})
 
 function onGridMouseMove(evt) { store.setCursorPosition(evt.clientX, evt.clientY); isCursorVisible.value = true }
 function onGridMouseLeave() { isCursorVisible.value = false }
@@ -399,16 +426,47 @@ function handleTrackWheel(e) {
   if (Math.abs(e.deltaX) > 0 || e.shiftKey) { e.preventDefault(); store.setTimelineShift(store.timelineShift + (e.shiftKey ? e.deltaY : e.deltaX)) }
 }
 
-const alignGuide = ref({ visible: false, x: 0, top: 0, height: 0, label: '', type: '', color: '', targetRect: null })
+const alignGuide = ref({ visible: false, x: 0, top: 0, height: 0, label: '', type: '', color: '', iconKey: '', targetRect: null })
+
 function updateAlignGuide(evt, action) {
   hoveredContext.value = { action, clientX: evt.clientX }
-  if (!isAltDown.value || !store.selectedActionId || store.selectedActionId === action.instanceId) return alignGuide.value.visible = false
-  const layout = store.getNodeRect(action.instanceId)
-  if (!layout) return
-  const isLeft = (store.toTimelineSpace(evt.clientX, evt.clientY).x - layout.rect.left) < (layout.rect.width / 2)
-  alignGuide.value = { visible: true, x: isLeft ? layout.rect.left : layout.rect.left + layout.rect.width, top: layout.rect.top, height: layout.rect.height, label: isShiftDown.value ? (isLeft ? t('timelineGrid.alignGuide.alignLeft') : t('timelineGrid.alignGuide.alignRight')) : (isLeft ? t('timelineGrid.alignGuide.snapFront') : t('timelineGrid.alignGuide.snapBack')), color: isShiftDown.value ? '#ff00ff' : '#00e5ff', targetRect: layout.rect }
+  if (!isAltDown.value || !store.selectedActionId || store.selectedActionId === action.instanceId) {
+    alignGuide.value.visible = false
+    return
+  }
+  const actionLayout = store.getNodeRect(action.instanceId)
+  if (!actionLayout) return
+
+  const rect = actionLayout.rect
+  const relLeft = rect.left
+  const relTop = rect.top
+  const clickX = store.toTimelineSpace(evt.clientX, evt.clientY).x - rect.left
+  const isClickLeft = clickX < (rect.width / 2)
+  const isShift = isShiftDown.value
+
+  let guideX = 0, label = '', type = '', color = '', iconKey = ''
+
+  if (!isShift) {
+    type = 'snap'
+    color = '#00e5ff'
+    if (isClickLeft) { guideX = relLeft; label = t('timelineGrid.alignGuide.snapFront'); iconKey = 'snap-left' }
+    else { guideX = relLeft + rect.width; label = t('timelineGrid.alignGuide.snapBack'); iconKey = 'snap-right' }
+  } else {
+    type = 'align'
+    color = '#ff00ff'
+    if (isClickLeft) { guideX = relLeft; label = t('timelineGrid.alignGuide.alignLeft'); iconKey = 'align-left' }
+    else { guideX = relLeft + rect.width; label = t('timelineGrid.alignGuide.alignRight'); iconKey = 'align-right' }
+  }
+
+  alignGuide.value = {
+    visible: true, x: guideX, top: relTop, height: rect.height, label, iconKey, type, color,
+    targetRect: { left: relLeft, top: relTop, width: rect.width, height: rect.height }
+  }
 }
+
 function hideAlignGuide() { alignGuide.value.visible = false; hoveredContext.value = null }
+
+function recalcAlignGuide() { if (hoveredContext.value) { const { action, clientX } = hoveredContext.value; updateAlignGuide({ clientX }, action) } }
 
 function onActionMouseDown(evt, track, action) {
   evt.stopPropagation(); if (action.isLocked && evt.button === 0) { store.selectAction(action.instanceId); ElMessage.warning({ message: t('timelineGrid.action.locked'), duration: 1000 }); return }
@@ -473,8 +531,8 @@ onMounted(() => {
       forceSvgUpdate(); updateScrollbarHeight()
     }).observe(tracksContentRef.value)
   }
-  window.addEventListener('keydown', (e) => { if (e.key === 'Alt') isAltDown.value = true; if (e.key === 'Shift') isShiftDown.value = true; handleKeyDown(e) })
-  window.addEventListener('keyup', (e) => { if (e.key === 'Alt') { isAltDown.value = false; hideAlignGuide() } if (e.key === 'Shift') isShiftDown.value = false })
+  window.addEventListener('keydown', (e) => { if (e.key === 'Alt') { isAltDown.value = true; recalcAlignGuide(); } if (e.key === 'Shift') { isShiftDown.value = true; recalcAlignGuide(); } handleKeyDown(e) })
+  window.addEventListener('keyup', (e) => { if (e.key === 'Alt') { isAltDown.value = false; hideAlignGuide() } if (e.key === 'Shift') { isShiftDown.value = false; recalcAlignGuide(); } })
 })
 </script>
 
@@ -506,13 +564,29 @@ onMounted(() => {
 
     <div class="time-ruler-wrapper" ref="timeRulerWrapperRef" @click="store.selectTrack(null)">
       <div class="ruler-content-container" :style="transformStyle">
-        <div class="time-ruler-track" :style="{ width: `${store.totalTimelineWidthPx}px` }">
+        <div v-if="store.prepDuration > 0" class="prep-zone-bg prep-zone-bg--ruler" :style="{ width: `${prepZoneWidthPxRounded}px` }"></div>
+        <div v-if="store.prepDuration > 0" class="battle-start-line battle-start-line--ruler" :style="{ left: `${prepZoneWidthPxRounded}px` }"></div>
+        <div v-if="store.prepDuration > 0" class="prep-zone-controls" :style="{ left: `${prepZoneWidthPxRounded}px` }">
+          <button type="button" class="prep-mini-btn" @click.stop="openPrepDurationEditor">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6l4 2"></path></svg>
+          </button>
+        </div>
+        <div v-if="isPrepDurationEditorOpen" class="prep-duration-popover" :style="{ left: `${prepZoneWidthPxRounded + 8}px` }" @mousedown.stop>
+          <input ref="prepDurationInputRef" v-model="prepDurationDraft" class="prep-duration-input" type="number" min="0.5" step="0.1" @keydown.enter.prevent="applyPrepDurationDraft" @keydown.esc.prevent="closePrepDurationEditor" @blur="applyPrepDurationDraft" />
+          <span class="prep-duration-unit">s</span>
+        </div>
+        <div v-show="showGameTime" class="time-ruler-track game-time" :style="{ width: `${totalWidthComputed}px` }">
+          <div v-for="tick in dynamicTicks.gameTicks" :key="tick.time" class="tick-line" :class="tick.type" :style="{ left: `${Math.round(tick.x)}px` }">
+            <span v-if="tick.label" class="tick-label">{{ tick.label }}</span>
+          </div>
+        </div>
+        <div class="time-ruler-track" :style="{ width: `${totalWidthComputed}px` }">
           <div v-for="tick in dynamicTicks.realTicks" :key="tick.time" class="tick-line" :class="tick.type" :style="{ left: `${Math.round(tick.x)}px` }">
             <span v-if="tick.label" class="tick-label">{{ tick.label }}</span>
           </div>
         </div>
         <div class="operation-layer">
-          <div v-for="op in operationMarkers" :key="op.id" class="key-cap" :class="op.customClass" :style="{ left: `${op.left}px`, top: `${op.top}px`, width: op.width ? `${op.width}px` : 'auto', height: `${op.height}px`, fontSize: `${op.fontSize}px` }">
+          <div v-for="op in operationMarkers" :key="op.id" class="key-cap" :class="[op.customClass, { 'is-hold': op.isHold }]" :style="{ left: `${op.left}px`, top: `${op.top}px`, width: op.width ? `${op.width}px` : 'auto', height: `${op.height}px`, fontSize: `${op.fontSize}px` }">
             <span class="key-text">{{ op.label }}</span>
           </div>
         </div>
@@ -535,26 +609,38 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="tracks-content-viewport" ref="tracksContentRef" @mousedown="onContentMouseDown" @wheel="handleTrackWheel" @mousemove="onGridMouseMove" @mouseleave="onGridMouseLeave" @contextmenu.prevent="store.openContextMenu($event, null, Math.max(0, Math.round(store.pxToTime(store.toTimelineSpace($event.clientX, $event.clientY).x))))">
+    <div class="tracks-content-viewport" ref="tracksContentRef" @mousedown="onContentMouseDown" @wheel="handleTrackWheel" @mousemove="onGridMouseMove" @mouseleave="onGridMouseLeave">
       <div class="tracks-content-scroller" :style="transformStyle">
         <div v-if="store.showCursorGuide && !store.isBoxSelectMode" class="cursor-guide" :style="{ transform: `translateX(${store.cursorPosTimeline.x}px)` }" v-show="isCursorVisible">
-          <div class="guide-time-label">{{ Math.trunc(Math.round(store.cursorCurrentTime) / 60) }}s {{ Math.abs(Math.round(store.cursorCurrentTime) % 60) }}t</div>
+          <div class="guide-time-label">{{ formatGuideTime(store.cursorCurrentTime) }}</div>
+        </div>
+        <div v-if="alignGuide.visible" class="align-guide-layer">
+          <div class="target-highlight-box" :style="{ left: `${alignGuide.targetRect.left}px`, top: `${alignGuide.targetRect.top}px`, width: `${alignGuide.targetRect.width}px`, height: `${alignGuide.targetRect.height}px`, color: alignGuide.color }"></div>
+          <div class="guide-line-vertical" :style="{ left: `${alignGuide.x}px`, color: alignGuide.color }"></div>
+          <div class="guide-float-label" :style="{ left: `${alignGuide.x}px`, top: `${alignGuide.top - 28}px`, backgroundColor: alignGuide.color, '--arrow-color': alignGuide.color }">
+            <span class="guide-icon">
+              <svg v-if="alignGuide.iconKey === 'snap-left'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><polyline points="12 19 5 12 12 5"></polyline><line x1="21" y1="4" x2="21" y2="20"></line></svg>
+              <svg v-if="alignGuide.iconKey === 'snap-right'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><polyline points="12 5 19 12 12 19"></polyline><line x1="3" y1="4" x2="3" y2="20"></line></svg>
+              <svg v-if="alignGuide.iconKey === 'align-left'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="18" x2="3" y2="18"></line><line x1="6" y1="2" x2="6" y2="22"></line></svg>
+              <svg v-if="alignGuide.iconKey === 'align-right'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="18" x2="3" y2="18"></line><line x1="18" y1="2" x2="18" y2="22"></line></svg>
+            </span>
+            <span class="guide-text">{{ alignGuide.label }}</span>
+          </div>
         </div>
         <div v-for="boundary in store.cycleBoundaries" :key="boundary.id" class="cycle-guide" :class="{ 'is-selected': boundary.id === store.selectedCycleBoundaryId }" :style="{ left: `${store.timeToPx(boundary.time)}px` }" @mousedown="onCycleLineMouseDown($event, boundary.id)"></div>
         <div v-if="isBoxSelecting" class="selection-box-overlay" :style="{ left: `${boxRect.left}px`, top: `${boxRect.top}px`, width: `${boxRect.width}px`, height: `${boxRect.height}px` }"></div>
         <div class="tracks-content">
-          <ContextMenu />
           <div v-for="(track, index) in store.tracks" :key="index" class="track-row" :id="`track-row-${index}`" :style="{ '--track-height': `${TRACK_HEIGHT}px` }" @dragover.prevent @drop="onTrackDrop(track, $event)">
             <div class="track-lane" :style="getTrackLaneStyle" ref="trackLaneRefs" :data-track-index="index">
               <GaugeOverlay v-if="track.id" :track-id="track.id"/>
               <div class="actions-container">
-                <ActionItem v-for="action in track.actions" :key="action.instanceId" :action="action" @mousedown="onActionMouseDown($event, track, action)" @mousemove="updateAlignGuide($event, action)" @mouseleave="hideAlignGuide" @contextmenu.prevent.stop="store.openContextMenu($event, action.instanceId)" />
+                <ActionItem v-memo="[action]" v-for="action in track.actions" :key="action.instanceId" :action="action" @mousedown="onActionMouseDown($event, track, action)" @mousemove="updateAlignGuide($event, action)" @mouseleave="hideAlignGuide" />
               </div>
             </div>
           </div>
         </div>
       </div>
-      <div class="timeline-horizontal-scrollbar" ref="fakeScrollbarRef" @scroll="onFakeScroll"><div class="scrollbar-spacer" :style="{ width: `${store.totalTimelineWidthPx}px` }"></div></div>
+      <div class="timeline-horizontal-scrollbar" ref="fakeScrollbarRef" @scroll="onFakeScroll"><div class="scrollbar-spacer" :style="{ width: `${totalWidthComputed}px` }"></div></div>
     </div>
 
     <el-dialog v-model="isSelectorVisible" :title="t('timelineGrid.operatorDialog.title')" width="600px" align-center class="char-selector-dialog" :append-to-body="true">
@@ -609,22 +695,55 @@ onMounted(() => {
 .track-row { min-height: 50px; padding: 30px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
 .track-lane { position: relative; height: 50px; background: rgba(255, 255, 255, 0.02); }
 
-.time-ruler-track { position: relative; height: 36px; border-bottom: 1px solid #444; background: #222; }
-.tick-line { position: absolute; bottom: 0; width: 1px; background: #444; pointer-events: none; }
-.tick-line.major { height: 16px; background: #888; }
-.tick-line.major-dim { height: 12px; background: #555; }
-.tick-line.tenth { height: 8px; background: #555; }
-.tick-line.frame { height: 4px; background: #444; }
+.ruler-content-container { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+.prep-zone-bg { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.04); border-right: 1px solid rgba(255, 255, 255, 0.12); pointer-events: none; z-index: 0; }
+.battle-start-line { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255, 255, 255, 0.38); transform: translateX(-1px); z-index: 2; }
+.time-ruler-wrapper { grid-column: 2 / 3; grid-row: 1 / 2; background: #2b2b2b; border-bottom: 1px solid #444; overflow: hidden; z-index: 6; user-select: none; }
+.time-ruler-track { position: relative; flex: 0 0 auto; height: 20px; width: 100%; border: none; background: transparent; }
+.time-ruler-track.game-time { opacity: 0.5; }
+.tick-line { position: absolute; bottom: 0; width: 1px; pointer-events: none; background: rgba(255, 255, 255, 0.3); transform: translateX(-0.5px); image-rendering: pixelated; }
+.tick-line.major { height: 17px; background: rgba(255, 255, 255, 0.7); z-index: 2; }
+.tick-line.major-dim { height: 17px; background: rgba(255, 255, 255, 0.15); z-index: 1; }
+.tick-line.tenth { height: 10px; background: rgba(255, 255, 255, 0.4); z-index: 1; }
+.tick-line.frame { height: 5px; background: rgba(255, 255, 255, 0.2); }
+.tick-label { position: absolute; left: 3px; bottom: 1px; white-space: nowrap; font-family: 'Roboto Mono', monospace; font-size: 10px; color: #888; user-select: none; pointer-events: none; line-height: 1; }
+.tick-line.major .tick-label { color: #e0e0e0; font-weight: bold; font-size: 11px; }
 
-.tick-label { 
-  position: absolute; bottom: 18px; left: 3px; font-size: 10px; color: #aaa; 
-  white-space: nowrap; font-family: 'Roboto Mono', monospace; 
+.cursor-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 215, 0, 0.8);
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 0 6px #ffd700;
 }
-.major .tick-label { color: #e0e0e0; font-weight: bold; }
 
-.cursor-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: #ffd700; z-index: 50; pointer-events: none; }
-.guide-time-label { position: absolute; top: 2px; left: 4px; background: #ffd700; color: #000; padding: 1px 4px; font-size: 10px; border-radius: 2px; font-weight: bold; }
+.guide-time-label {
+  width: fit-content;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: bold;
+  font-family: monospace;
+  padding: 2px 4px;
+  border-radius: 0 4px 4px 0;
+  white-space: nowrap;
+  line-height: 1;
+}
 
-.timeline-horizontal-scrollbar { position: absolute; bottom: 0; left: 0; width: 100%; height: 12px; overflow-x: auto; opacity: 0.6; z-index: 100; }
+.align-guide-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2000; overflow: visible; }
+.target-highlight-box { position: absolute; border: 1px solid; border-radius: 4px; pointer-events: none; background: currentColor; opacity: 0.1; box-sizing: border-box; transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+.target-highlight-box::after { content: ''; position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px; border: 1px solid inherit; border-radius: 5px; opacity: 0.6; animation: pulse-border 1.5s infinite; box-shadow: 0 0 8px currentColor; }
+.guide-line-vertical { position: absolute; top: -100px; bottom: -100px; width: 1px; background: linear-gradient(to bottom, transparent, currentColor 20%, currentColor 80%, transparent); pointer-events: none; box-shadow: 0 0 6px currentColor; z-index: 2001; transition: left 0.15s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.guide-float-label { --arrow-color: transparent; position: absolute; padding: 4px 8px; border-radius: 20px; color: #000; font-weight: 800; font-size: 10px; white-space: nowrap; pointer-events: none; transform: translateX(-50%); backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 2002; border: 1px solid rgba(255, 255, 255, 0.3); transition: left 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.15s ease-out; display: flex; align-items: center; gap: 4px; }
+.guide-float-label::after { content: ''; position: absolute; top: 100%; left: 50%; margin-left: -4px; border-width: 4px; border-style: solid; border-color: var(--arrow-color) transparent transparent transparent; }
+.guide-icon { display: flex; align-items: center; }
+.guide-text { line-height: 1; }
+
+@keyframes pulse-border { 0% { opacity: 0.4; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.02); } 100% { opacity: 0.4; transform: scale(1); } }
+
+.timeline-horizontal-scrollbar { position: sticky; bottom: 0; left: 0; width: 100%; height: 12px; overflow-x: auto; overflow-y: hidden; opacity: 0.7; z-index: 100; transition: opacity 0.2s; background: #18181c }.timeline-horizontal-scrollbar:hover { opacity: 1; }.scrollbar-spacer { height: 1px; }.prep-zone-controls { position: absolute; left: 0; top: auto; bottom: 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; pointer-events: none; z-index: 6; transform: translateX(-50%); }.prep-mini-btn { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; padding: 0; border: none; background: transparent; color: rgba(255, 255, 255, 0.85); cursor: pointer; border-radius: 6px; outline: none; transition: color 0.12s ease; pointer-events: auto; }.prep-mini-btn:hover { color: #ffd700; }.prep-duration-popover { position: absolute; top: 6px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(0, 0, 0, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); z-index: 50; }.prep-duration-input { width: 72px; height: 22px; background: rgba(255, 255, 255, 0.06); color: #fff; border: 1px solid rgba(255, 255, 255, 0.18); outline: none; padding: 0 6px; font-family: 'Roboto Mono', monospace; font-size: 12px; }.prep-duration-input:focus { border-color: rgba(255, 215, 0, 0.7); }.prep-duration-unit { color: rgba(255, 255, 255, 0.6); font-size: 12px; font-family: 'Roboto Mono', monospace; }
+
 .selection-box-overlay { position: absolute; background: rgba(255, 215, 0, 0.15); border: 1px solid #ffd700; pointer-events: none; z-index: 100; }
 </style>
