@@ -580,13 +580,12 @@ function onActionMouseDown(evt, track, action) {
     return
   }
   if (evt.button !== 0) return
-  setTimeout(() => {
-    if (!store.multiSelectedIds.has(action.instanceId)) store.selectAction(action.instanceId)
-    isMouseDown.value = true; isDragStarted.value = false; movingActionId.value = action.instanceId; movingTrackId.value = track.id
-    dragStartTimes.clear(); store.tracks.forEach(t => t.actions.forEach(a => dragStartTimes.set(a.instanceId, a.startTime)))
-    initialMouseX.value = evt.clientX; dragStartMouseTime.value = store.pxToTime(store.toTimelineSpace(evt.clientX, evt.clientY).x)
-    window.addEventListener('mousemove', onWindowMouseMove); window.addEventListener('mouseup', onWindowMouseUp)
-  }, 0)
+  
+  if (!store.multiSelectedIds.has(action.instanceId)) store.selectAction(action.instanceId)
+  isMouseDown.value = true; isDragStarted.value = false; movingActionId.value = action.instanceId; movingTrackId.value = track.id
+  dragStartTimes.clear(); store.tracks.forEach(t => t.actions.forEach(a => dragStartTimes.set(a.instanceId, a.startTime)))
+  initialMouseX.value = evt.clientX; dragStartMouseTime.value = store.pxToTime(store.toTimelineSpace(evt.clientX, evt.clientY).x)
+  window.addEventListener('mousemove', onWindowMouseMove); window.addEventListener('mouseup', onWindowMouseUp)
 }
 
 function updateDragPosition(clientX) {
@@ -594,18 +593,17 @@ function updateDragPosition(clientX) {
   const timelineX = store.toTimelineSpace(clientX, 0).x
   const mouseTime = store.pxToTime(timelineX)
   const deltaTime = mouseTime - dragStartMouseTime.value
-  const snap = store.snapStep || 0.1
+  const tickDuration = 1 / 60
 
   store.tracks.forEach(t => t.actions.forEach(a => { 
     if (store.multiSelectedIds?.has(a.instanceId) && !a.isLocked) {
       const targetTime = dragStartTimes.get(a.instanceId) + deltaTime
-      a.startTime = Math.max(0, snapMs(Math.round(targetTime / snap) * snap))
+      a.logicalStartTime = Math.max(0, Math.round(targetTime / tickDuration) * tickDuration)
     }
   }))
   if (typeof store.refreshAllActionShifts === 'function') store.refreshAllActionShifts()
   nextTick(() => svgRenderKey.value++)
 }
-
 function onWindowMouseMove(evt) {
   if (draggingSwitchEventId.value || draggingCycleBoundaryId.value) {
     isDragStarted.value = true; const t = calculateTimeFromEvent(evt)

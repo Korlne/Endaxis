@@ -612,16 +612,16 @@ export const useTimelineStore = defineStore('timeline', () => {
             }
             
             // 2. 处理特殊技 (多段)
-            if (type === 'special_attack') {
+if (type === 'special_attack') {
                 const segments = (char.special_attack_segments || []).map((seg, i) => ({
                     id: `${char.id}_special_seg${i + 1}`,
                     type: 'special_attack',
                     name: `E${i + 1}`,
                     kind: 'attack_segment',
-                    duration: Number(seg.duration) || 0,
+                    ...seg, // 必须放在前面，防止覆盖后面的属性
+                    duration: (Number(seg.duration) || 0) / 60,
                     damageTicks: seg.hit_ticks || [],
-                    cancelWindows: seg.cancel_windows || {},
-                    ...seg
+                    cancelWindows: seg.cancel_windows || {}
                 }))
                 return {
                     id: `${char.id}_special`,

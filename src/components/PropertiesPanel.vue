@@ -303,9 +303,9 @@ function getIconPath(type, charId = null) {
         <div class="attribute-grid">
           <div class="form-group compact full-width-col" style="grid-column: span 2;">
             <label>Hit Ticks (以逗号分隔)</label>
-            <input type="text" class="simple-input" :value="(targetData.hitTicks || []).join(', ')" @change="e => {
+            <input type="text" class="simple-input" :value="(targetData.hit_ticks || []).join(', ')" @change="e => {
               const arr = e.target.value.split(',').map(v => parseInt(v.trim())).filter(v => !isNaN(v));
-              updateActionProp('hitTicks', arr);
+              updateActionProp('hit_ticks', arr);
             }" placeholder="例如: 13, 24" />
           </div>
           <div class="form-group compact">

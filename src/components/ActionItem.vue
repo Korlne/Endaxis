@@ -73,9 +73,10 @@ const themeColor = computed(() => {
 const actionLayout = computed(() => store.nodeRects[props.action.instanceId])
 
 function getDamageTickTitle(tick) {
-  if (!tick || !tick.data) return ''
-  // 兼容不同数据来源的字段命名
-  const timeVal = tick.data.offset ?? tick.data.time ?? tick.time ?? 0
+  if (!tick || tick.data === undefined) return ''
+  const timeVal = typeof tick.data === 'number' 
+    ? tick.data / 60 
+    : (tick.data.offset ?? tick.data.time ?? tick.time ?? 0)
   return store.formatTimeLabel(timeVal)
 }
 
@@ -356,8 +357,10 @@ const renderableTicks = computed(() => {
   const ticks = props.action.damageTicks || []
 
   return ticks.map(tick => {
-    const originalOffset = tick.offset || 0
-    const shiftedTimestamp = typeof store.getShiftedEndTime === 'function' 
+    const originalOffset = typeof tick === 'number' ? tick / 60 : (tick.offset || 0)
+    const shiftedTimestamp = typeof store.getShiftedEndTime === 'function'
+      ? store.getShiftedEndTime(props.action.startTime, originalOffset, props.action.instanceId)
+      : ((props.action.startTime || 0) + originalOffset)
       ? store.getShiftedEndTime(props.action.startTime, originalOffset, props.action.instanceId) 
       : ((props.action.startTime || 0) + originalOffset)
     const left = store.timeToPx(shiftedTimestamp) - store.timeToPx(props.action.startTime)

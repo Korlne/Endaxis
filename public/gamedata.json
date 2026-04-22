@@ -131,12 +131,15 @@
         ],
         "special_attack_segments": [
           {
-            "duration": 0,
+            "duration": 40,
             "gaugeGain": 0,
-            "hit_ticks": [],
+            "hit_ticks": [
+              15,
+              26
+            ],
             "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
+              "combo": 18,
+              "dodge": 19,
               "skill": 0,
               "swap": 0
             }
