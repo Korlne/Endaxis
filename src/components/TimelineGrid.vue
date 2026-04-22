@@ -380,6 +380,19 @@ function updateScrollbarHeight() {
 
 function calculateTimeFromEvent(evt) { return Math.max(0, store.pxToTime(store.toTimelineSpace(evt.clientX, evt.clientY).x)) }
 
+const getTrackLaneStyle = computed(() => {
+  const w = TIME_BLOCK_WIDTH.value
+  const totalWidth = totalWidthComputed.value
+
+  return {
+    width: `${totalWidth}px`,
+    backgroundImage: `linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 0)`,
+    backgroundSize: `${w}px 100%`,
+    backgroundRepeat: 'repeat-x',
+    imageRendering: 'auto'
+  }
+})
+
 const fakeScrollbarRef = ref(null)
 let ticking = false
 function onFakeScroll(e) {

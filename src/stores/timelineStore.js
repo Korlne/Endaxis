@@ -272,14 +272,11 @@ export const useTimelineStore = defineStore('timeline', () => {
         linkCdReduction: 0,
     })
 
-    /**
-     * 修改点 1: 轨道初始化单轨化
-     */
     const createDefaultTracks = () => [
-        createEmptyTrack(), // 代理人 1
-        createEmptyTrack(), // 代理人 2
-        createEmptyTrack(), // 代理人 3
-        createEmptyTrack()  // 邦布
+        createEmptyTrack(),
+        createEmptyTrack(),
+        createEmptyTrack(),
+        createEmptyTrack()
     ]
 
 
@@ -346,6 +343,52 @@ export const useTimelineStore = defineStore('timeline', () => {
 
     function resolveNode(nodeId) {
         return getActionById(nodeId) || getEffectById(nodeId)
+    }
+
+    // ==========================================
+    // 代理人上场管理逻辑 (逻辑层重构)
+    // ==========================================
+
+    /**
+     * 判断干员是否已在队伍中 (Getter 替代)
+     */
+    const isCharacterInTeam = (charId) => {
+        return tracks.value.some(track => track.id === charId)
+    }
+
+    /**
+     * 切换轨道干员 (Action 替代)
+     * 逻辑：确保唯一性。如果该干员已经在其他轨道，先将其从原轨道卸下并清空动作。
+     */
+    function changeTrackOperator(trackIndex, charId) {
+        // 1. 确保全局唯一
+        tracks.value.forEach((t, idx) => {
+            if (t.id === charId && idx !== trackIndex) {
+                t.id = null
+                t.actions = []
+            }
+        })
+
+        // 2. 为目标轨道装载
+        const track = tracks.value[trackIndex]
+        if (track && track.id !== charId) {
+            track.id = charId
+            track.actions = [] 
+        }
+        
+        commitState()
+    }
+
+    /**
+     * 清空轨道干员 (Action 替代)
+     */
+    function clearTrackOperator(trackIndex) {
+        const track = tracks.value[trackIndex]
+        if (track) {
+            track.id = null
+            track.actions = []
+            commitState()
+        }
     }
 
     function updateTrackGaugeEfficiency(trackId, value) {
@@ -415,9 +458,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     const historyIndex = ref(-1)
     const MAX_HISTORY = 50
 
-    /**
-     * 修改点 4: 更新 commitState
-     */
     function commitState() {
         if (historyIndex.value < historyStack.value.length - 1) {
             historyStack.value = historyStack.value.slice(0, historyIndex.value + 1)
@@ -449,9 +489,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         restoreState(JSON.parse(historyStack.value[historyIndex.value]))
     }
 
-    /**
-     * 修改点 4: 更新 restoreState
-     */
     function restoreState(snapshot) {
         const rawPrep = Number(snapshot?.prepDuration)
         if (snapshot?.prepDuration !== undefined && Number.isFinite(rawPrep) && rawPrep < MIN_PREP_DURATION) {
@@ -465,9 +502,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         clearSelection()
     }
 
-    /**
-     * 修改点 4: 更新 _createSnapshot
-     */
     function _createSnapshot() {
         return JSON.parse(JSON.stringify({
             tracks: tracks.value,
@@ -479,9 +513,8 @@ export const useTimelineStore = defineStore('timeline', () => {
         }))
     }
 
-    /**
-     * 修改点 4: 更新 _loadSnapshot
-     */
+    function setDraggingSkill(skill) { draggingSkillData.value = skill }
+
     function _loadSnapshot(data) {
         if (!data) return
         const normalized = normalizePrepConfig(JSON.parse(JSON.stringify(data)))
@@ -623,9 +656,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     function selectTrack(tid) { activeTrackId.value = tid; clearSelection() }
     function selectAction(id) { const same = id === selectedActionId.value; clearSelection(); if (!same) { selectedActionId.value = id; multiSelectedIds.value.add(id) } }
     
-    /**
-     * 修改点 3: 更新 clearSelection
-     */
     function clearSelection() { 
         selectedActionId.value = selectedAnomalyId.value = selectedCycleBoundaryId.value = selectedSwitchEventId.value = null; 
         multiSelectedIds.value.clear(); 
@@ -660,9 +690,27 @@ export const useTimelineStore = defineStore('timeline', () => {
         commitState()
     }
 
-    /**
-     * 修改点 5: 更新 removeCurrentSelection
-     */
+    function moveTrack(fromIndex, toIndex) {
+        if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= tracks.value.length || toIndex >= tracks.value.length) {
+            return
+        }
+
+        const temp = tracks.value[fromIndex]
+        tracks.value[fromIndex] = tracks.value[toIndex]
+        tracks.value[toIndex] = temp
+
+        commitState()
+    }
+
+    function selectAction(instanceId) {
+        const isSame = (instanceId === selectedActionId.value)
+        clearSelection()
+        if (!isSame) {
+            selectedActionId.value = instanceId
+            multiSelectedIds.value.add(instanceId)
+        }
+    }
+
     function removeCurrentSelection() {
         const targets = new Set(multiSelectedIds.value); if (selectedActionId.value) targets.add(selectedActionId.value)
         targets.forEach(id => { const a = getActionById(id)?.node; if (a?.comboGroupId && a.comboLinked !== false) tracks.value.forEach(t => t.actions.forEach(x => { if (x.comboGroupId === a.comboGroupId) targets.add(x.instanceId) })) })
@@ -695,9 +743,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         return rects
     })
 
-    /**
-     * 修改点 5: 更新 effectLayouts
-     */
     const effectLayouts = computed(() => {
         const layouts = new Map();
         const SIZE = 20; const MARGIN = 2; const VGAP = 3; const BORDER = 2
@@ -800,9 +845,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         contextMenu.value = { visible: true, x: evt.clientX, y: evt.clientY, targetId, clickTime }
     }
 
-    /**
-     * 修改点 6: 从导出对象移除 connections, toggleConnectionTool
-     */
     return {
         setTrackLaneRect, setTimelineRect, setScrollTop, contextMenu, closeContextMenu, openContextMenu,
         togglePrepExpanded, setCursorPosition, toggleCursorGuide, toggleBoxSelectMode, toggleSnapStep, toggleNewCompiler,
@@ -818,6 +860,9 @@ export const useTimelineStore = defineStore('timeline', () => {
         scenarioList, activeScenarioId, switchScenario, addScenario, duplicateScenario, deleteScenario,
         effectLayouts, getActionById, getEffectById, prepDuration, prepExpanded, viewDuration, prepZoneWidthPx, totalTimelineWidthPx,
         timeToPx, pxToTime, formatAxisTimeLabel, setPrepDuration,
-        globalExtensions, getShiftedEndTime, refreshAllActionShifts
+        globalExtensions, getShiftedEndTime, refreshAllActionShifts,
+
+        // 新增/修改的方法
+        isCharacterInTeam, changeTrackOperator, clearTrackOperator, moveTrack, setDraggingSkill, selectAction
     }
 })
