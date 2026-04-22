@@ -408,204 +408,7 @@ function onNativeDragEnd() {
         <div class="header-icon-bar"></div>
         <h3 class="char-name">{{ activeLibraryTitle }}</h3>
       </div>
-      <div class="lib-tabs">
-        <button
-          class="lib-tab"
-          :class="{ active: hasActiveCharacter && activeLibraryTab === 'character' }"
-          :disabled="!hasActiveCharacter"
-          @click="activeLibraryTab = 'character'">
-          {{ t('actionLibrary.tabs.operator') }}
-        </button>
-        <button
-          class="lib-tab"
-          :class="{ active: hasActiveCharacter && activeLibraryTab === 'weapon' }"
-          :disabled="!hasWeaponLibrary || !hasActiveCharacter"
-          :title="t('actionLibrary.tabs.weaponNeedSelect')"
-          @click="activeLibraryTab = 'weapon'">
-          {{ t('actionLibrary.tabs.weapon') }}
-        </button>
-        <button
-          class="lib-tab"
-          :class="{ active: hasActiveCharacter && activeLibraryTab === 'set' }"
-          :disabled="!hasActiveCharacter || !hasAnyEquipmentEquipped"
-          :title="t('actionLibrary.tabs.setNeedEquip')"
-          @click="activeLibraryTab = 'set'">
-          {{ t('actionLibrary.tabs.set') }}
-        </button>
-      </div>
       <div class="header-divider"></div>
-    </div>
-
-    <div v-if="activeTrack && activeCharacter && activeLibraryTab === 'character'" class="gauge-settings-panel">
-      <div class="panel-tag">{{ t('actionLibrary.panels.operatorStats') }}</div>
-
-      <div class="setting-group">
-        <div class="setting-info">
-          <span class="label">{{ t('actionLibrary.labels.initialCharge') }}</span>
-          <span class="value cyan">{{ initialGaugeValue }}</span>
-        </div>
-        <div class="setting-controls">
-          <el-slider v-model="initialGaugeValue" :max="maxGaugeValue" :show-tooltip="false" size="small" class="tech-slider cyan-theme" />
-          <CustomNumberInput v-model="initialGaugeValue" :min="0" :max="maxGaugeValue" active-color="#00e5ff" class="tech-input" />
-        </div>
-      </div>
-
-      <div class="group-divider"></div>
-
-      <div class="setting-group">
-        <div class="setting-info">
-          <span class="label">{{ t('actionLibrary.labels.maxCharge') }}</span>
-          <span class="value gold">{{ maxGaugeValue }}</span>
-        </div>
-        <div class="setting-controls">
-          <el-slider v-model="maxGaugeValue" :min="1" :max="300" :show-tooltip="false" size="small" class="tech-slider gold-theme" />
-          <CustomNumberInput v-model="maxGaugeValue" :min="1" :max="300" active-color="#ffd700" class="tech-input" />
-        </div>
-      </div>
-
-      <div class="group-divider"></div>
-
-      <div class="setting-group">
-        <div class="setting-info">
-          <span class="label">{{ t('actionLibrary.labels.chargeEfficiency') }}</span>
-          <span class="value green">{{ gaugeEfficiencyValue }}%</span>
-        </div>
-        <div class="setting-controls">
-          <el-slider v-model="gaugeEfficiencyValue" :min="0" :max="300" :step="0.1" :show-tooltip="false" size="small" class="tech-slider green-theme" />
-          <CustomNumberInput v-model="gaugeEfficiencyValue" :min="0" :max="300" suffix="%" active-color="#52c41a" class="tech-input" />
-        </div>
-      </div>
-
-      <div class="group-divider"></div>
-
-      <div class="setting-group">
-        <div class="setting-info">
-          <span class="label">{{ t('actionLibrary.labels.linkCdReduction') }}</span>
-          <span class="value gold">{{ linkCdReductionValue }}%</span>
-        </div>
-        <div class="setting-controls">
-          <el-slider v-model="linkCdReductionValue" :min="0" :max="100" :step="1" :show-tooltip="false" size="small" class="tech-slider gold-theme" />
-          <CustomNumberInput v-model="linkCdReductionValue" :min="0" :max="100" suffix="%" active-color="#ffd700" class="tech-input" />
-        </div>
-      </div>
-
-      <div class="group-divider"></div>
-
-      <div class="setting-group">
-        <div class="setting-info">
-          <span class="label">{{ t('actionLibrary.labels.originiumArtsPower') }}</span>
-          <span class="value purple">{{ originiumArtsPowerValue }}</span>
-        </div>
-        <div class="setting-controls">
-          <el-slider v-model="originiumArtsPowerValue" :min="0" :max="200" :step="1" :show-tooltip="false" size="small" class="tech-slider purple-theme" />
-          <CustomNumberInput v-model="originiumArtsPowerValue" :min="0" :max="200" :step="1" active-color="#b37feb" class="tech-input" />
-        </div>
-      </div>
-
-    </div>
-
-    <div v-if="activeTrack && activeCharacter && activeLibraryTab === 'weapon' && activeWeapon" class="gauge-settings-panel">
-      <div class="panel-tag">{{ t('actionLibrary.panels.weaponStats') }}</div>
-
-      <div class="setting-group">
-        <div class="setting-info stacked-layout">
-          <span class="label">{{ t('actionLibrary.labels.commonSlot1') }}</span>
-          <span class="value">{{ weaponSlot1Label }}</span>
-        </div>
-        <div class="setting-controls">
-          <el-slider v-model="weaponCommon1TierValue" :min="1" :max="9" :step="1" :show-tooltip="false" size="small" class="tech-slider white-theme" />
-          <CustomNumberInput v-model="weaponCommon1TierValue" :min="1" :max="9" :suffix="t('common.levelSuffix')" class="tech-input" />
-        </div>
-      </div>
-
-      <div class="group-divider"></div>
-
-      <div class="setting-group">
-        <div class="setting-info stacked-layout">
-          <span class="label">{{ t('actionLibrary.labels.commonSlot2') }}</span>
-          <span class="value">{{ weaponSlot2Label }}</span>
-        </div>
-        <div class="setting-controls">
-          <el-slider v-model="weaponCommon2TierValue" :min="1" :max="9" :step="1" :show-tooltip="false" size="small" class="tech-slider white-theme" />
-          <CustomNumberInput v-model="weaponCommon2TierValue" :min="1" :max="9" :suffix="t('common.levelSuffix')" class="tech-input" />
-        </div>
-      </div>
-
-      <div class="group-divider"></div>
-
-      <div class="setting-group">
-        <div class="setting-info stacked-layout">
-          <span class="label">{{ activeWeapon.buffName || t('actionLibrary.labels.exclusiveBuff') }}</span>
-          <span class="value">{{ weaponBuffKeysLabel }}</span>
-        </div>
-        <div class="setting-controls">
-          <el-slider v-model="weaponBuffTierValue" :min="1" :max="9" :step="1" :show-tooltip="false" size="small" class="tech-slider white-theme" />
-          <CustomNumberInput v-model="weaponBuffTierValue" :min="1" :max="9" :suffix="t('common.levelSuffix')" class="tech-input" />
-        </div>
-      </div>
-    </div>
-
-    <div v-if="activeTrack && activeCharacter && activeLibraryTab === 'set'" class="gauge-settings-panel">
-      <div class="panel-tag">{{ t('actionLibrary.panels.equipmentRefine') }}</div>
-
-      <div v-if="equipArmor" class="setting-group">
-        <div class="setting-info stacked-layout">
-          <span class="label">{{ t('actionLibrary.labels.armor') }}</span>
-          <span class="value">{{ formatEquipValue(equipArmor) }}</span>
-        </div>
-        <div class="setting-controls" v-if="Number(equipArmor.level) === 70">
-          <el-slider v-model="equipArmorTierValue" :min="0" :max="3" :step="1" :show-tooltip="false" size="small" class="tech-slider white-theme" />
-          <CustomNumberInput v-model="equipArmorTierValue" :min="0" :max="3" :suffix="t('common.levelSuffix')" class="tech-input" />
-        </div>
-        <div class="setting-controls" v-else>
-          <span class="value" style="color:#666; font-size: 12px;">{{ t('actionLibrary.hints.noRefineNon70') }}</span>
-        </div>
-      </div>
-
-      <div v-if="equipArmor && equipGloves" class="group-divider"></div>
-      <div v-if="equipGloves" class="setting-group">
-        <div class="setting-info stacked-layout">
-          <span class="label">{{ t('actionLibrary.labels.gloves') }}</span>
-          <span class="value">{{ formatEquipValue(equipGloves) }}</span>
-        </div>
-        <div class="setting-controls" v-if="Number(equipGloves.level) === 70">
-          <el-slider v-model="equipGlovesTierValue" :min="0" :max="3" :step="1" :show-tooltip="false" size="small" class="tech-slider white-theme" />
-          <CustomNumberInput v-model="equipGlovesTierValue" :min="0" :max="3" :suffix="t('common.levelSuffix')" class="tech-input" />
-        </div>
-        <div class="setting-controls" v-else>
-          <span class="value" style="color:#666; font-size: 12px;">{{ t('actionLibrary.hints.noRefineNon70') }}</span>
-        </div>
-      </div>
-
-      <div v-if="(equipArmor || equipGloves) && equipAccessory1" class="group-divider"></div>
-      <div v-if="equipAccessory1" class="setting-group">
-        <div class="setting-info stacked-layout">
-          <span class="label">{{ t('actionLibrary.labels.accessory1') }}</span>
-          <span class="value">{{ formatEquipValue(equipAccessory1) }}</span>
-        </div>
-        <div class="setting-controls" v-if="Number(equipAccessory1.level) === 70">
-          <el-slider v-model="equipAccessory1TierValue" :min="0" :max="3" :step="1" :show-tooltip="false" size="small" class="tech-slider white-theme" />
-          <CustomNumberInput v-model="equipAccessory1TierValue" :min="0" :max="3" :suffix="t('common.levelSuffix')" class="tech-input" />
-        </div>
-        <div class="setting-controls" v-else>
-          <span class="value" style="color:#666; font-size: 12px;">{{ t('actionLibrary.hints.noRefineNon70') }}</span>
-        </div>
-      </div>
-
-      <div v-if="(equipArmor || equipGloves || equipAccessory1) && equipAccessory2" class="group-divider"></div>
-      <div v-if="equipAccessory2" class="setting-group">
-        <div class="setting-info stacked-layout">
-          <span class="label">{{ t('actionLibrary.labels.accessory2') }}</span>
-          <span class="value">{{ formatEquipValue(equipAccessory2) }}</span>
-        </div>
-        <div class="setting-controls" v-if="Number(equipAccessory2.level) === 70">
-          <el-slider v-model="equipAccessory2TierValue" :min="0" :max="3" :step="1" :show-tooltip="false" size="small" class="tech-slider white-theme" />
-          <CustomNumberInput v-model="equipAccessory2TierValue" :min="0" :max="3" :suffix="t('common.levelSuffix')" class="tech-input" />
-        </div>
-        <div class="setting-controls" v-else>
-          <span class="value" style="color:#666; font-size: 12px;">{{ t('actionLibrary.hints.noRefineNon70') }}</span>
-        </div>
-      </div>
     </div>
 
     <div v-if="hasActiveCharacter" class="skill-section">
@@ -715,7 +518,7 @@ function onNativeDragEnd() {
 .lib-tab:disabled { opacity: 0.35; cursor: not-allowed; }
 .header-divider { height: 2px; background: linear-gradient(90deg, #ffd700 0%, transparent 100%); opacity: 0.3; margin-top: 3px; }
 
-/* 参数面板 */
+/* 参数面板样式 - 保留原有 CSS */
 .gauge-settings-panel {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
   backdrop-filter: blur(10px);
@@ -725,35 +528,19 @@ function onNativeDragEnd() {
   padding: 12px;
   margin-top: 10px;
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: flex; flex-direction: column; gap: 10px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 .panel-tag {
-  position: absolute;
-  right: 0;
-  top: -12px;
-  background: #1a1a1a;
-  border: 1px solid #444;
-  border-bottom: none;
-  font-size: 10px;
-  color: #aaa;
-  padding: 2px 10px;
-  font-family: 'Inter', sans-serif;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  clip-path: polygon(10% 0, 100% 0, 100% 100%, 0% 100%);
+  position: absolute; right: 0; top: -12px;
+  background: #1a1a1a; border: 1px solid #444; border-bottom: none;
+  font-size: 10px; color: #aaa; padding: 2px 10px;
+  font-family: 'Inter', sans-serif; letter-spacing: 1px;
+  text-transform: uppercase; clip-path: polygon(10% 0, 100% 0, 100% 100%, 0% 100%);
 }
 .gauge-settings-panel::before {
-  content: "";
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 10px;
-  height: 10px;
-  border-right: 1px solid rgba(255,255,255,0.3);
-  border-bottom: 1px solid rgba(255,255,255,0.3);
+  content: ""; position: absolute; bottom: 4px; right: 4px; width: 10px; height: 10px;
+  border-right: 1px solid rgba(255,255,255,0.3); border-bottom: 1px solid rgba(255,255,255,0.3);
 }
 .setting-group { display: flex; flex-direction: column; gap: 4px; }
 .setting-info { display: flex; justify-content: space-between; align-items: baseline; }

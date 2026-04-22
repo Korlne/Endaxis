@@ -122,8 +122,15 @@ function openCharacterSelector(index) {
   isSelectorVisible.value = true
 }
 
+// 修改点：确保干员唯一上场，重复选择时执行置换逻辑
 function confirmCharacterSelection(charId) {
   if (targetTrackIndex.value === null) return
+  
+  const existingTrackIndex = store.tracks.findIndex(t => t.id === charId)
+  if (existingTrackIndex !== -1 && existingTrackIndex !== targetTrackIndex.value) {
+    store.tracks[existingTrackIndex].id = null
+    store.tracks[existingTrackIndex].actions = []
+  }
   
   const track = store.tracks[targetTrackIndex.value]
   if (track && track.id !== charId) {
@@ -132,7 +139,7 @@ function confirmCharacterSelection(charId) {
     store.commitState()
   }
   
-  isSelectorVisible.value = false // 显式关闭
+  isSelectorVisible.value = false 
 }
 
 function removeOperator() {
@@ -165,13 +172,16 @@ const filteredListFlat = computed(() => {
 })
 
 const rosterByRarity = computed(() => {
-  const groups = {}
+  const groups = { 'S': [], 'A': [] }
   filteredListFlat.value.forEach(char => {
-    const r = char.rarity || 1
-    if (!groups[r]) groups[r] = []
-    groups[r].push(char)
+    const rank = char.rarity >= 6 ? 'S' : 'A'
+    groups[rank].push(char)
   })
-  return Object.keys(groups).map(Number).sort((a, b) => b - a).map(level => ({ level, list: groups[level] }))
+  
+  return [
+    { level: 'S', list: groups['S'] },
+    { level: 'A', list: groups['A'] }
+  ].filter(g => g.list.length > 0)
 })
 
 function getRarityBaseColor(rarity) {
@@ -180,7 +190,7 @@ function getRarityBaseColor(rarity) {
 }
 
 // ===================================================================================
-// 核心逻辑：操作轴与刻度 (高性能版)
+// 核心逻辑：操作轴与刻度
 // ===================================================================================
 
 const operationMarkers = computed(() => {
@@ -336,14 +346,13 @@ const dynamicTicks = refThrottled(rawDynamicTicks, 100);
 const formatGuideTime = (viewTime) => {
   const bt = viewTime - (store.prepDuration || 0)
   const abs = Math.abs(bt)
-  const totalFrames = Math.floor(abs * 60 + 0.001) // 修复浮点精度造成的抖动
+  const totalFrames = Math.floor(abs * 60 + 0.001) 
   const s = Math.floor(totalFrames / 60)
   const f = totalFrames % 60
   const sign = bt < -0.001 ? '-' : ''
   return `${sign}${s}s ${String(f).padStart(2, '0')}t`
 }
 
-// [新增] 绕过 Store 缺失导出的 Bug，在本地直接安全修改时间轴平移量
 function setLocalTimelineShift(v) {
   const maxShift = Math.max(0, store.totalTimelineWidthPx - (store.timelineRect?.width || 0))
   store.timelineShift = Math.min(Math.max(0, v), maxShift)
@@ -436,7 +445,7 @@ function onPanMouseUp(evt) {
 }
 
 function onContentMouseDown(evt) {
-  if (evt.button === 2) { // 拦截右键，开始平移
+  if (evt.button === 2) { 
     evt.preventDefault()
     isPanning.value = true
     panStartX.value = evt.clientX
@@ -456,7 +465,6 @@ function onContentMouseDown(evt) {
 }
 
 function onContextMenu(evt) {
-  // 如果用户刚进行了右键平移拖拽，则屏蔽默认的右键菜单
   if (Math.abs(evt.clientX - panStartX.value) > 3) evt.preventDefault()
 }
 
@@ -543,7 +551,6 @@ function updateAlignGuide(evt, action) {
 }
 
 function hideAlignGuide() { alignGuide.value.visible = false; hoveredContext.value = null }
-
 function recalcAlignGuide() { if (hoveredContext.value) { const { action, clientX } = hoveredContext.value; updateAlignGuide({ clientX }, action) } }
 
 function onActionMouseDown(evt, track, action) {
@@ -681,7 +688,18 @@ onMounted(() => {
         </div>
         <div class="char-select-trigger" @click.stop="openCharacterSelector(index)">
           <div class="operator-row">
-            <div class="trigger-avatar-box"><img v-if="track.id" :src="track.avatar" class="avatar-image" /><div v-else class="avatar-placeholder"></div></div>
+            <div class="trigger-avatar-box">
+              <img v-if="track.id" :src="track.avatar" class="avatar-image" />
+              <div v-else class="avatar-placeholder"></div>
+              <div class="avatar-change-hint" v-if="track.id">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.5 2v6h-6"></path>
+                  <path d="M21.5 8A10 10 0 0 0 3 8"></path>
+                  <path d="M2.5 22v-6h6"></path>
+                  <path d="M2.5 16A10 10 0 0 0 21 16"></path>
+                </svg>
+              </div>
+            </div>
             <div class="trigger-info"><span class="trigger-name">{{ track.name || t('timelineGrid.track.selectOperator') }}</span></div>
           </div>
         </div>
@@ -752,6 +770,7 @@ onMounted(() => {
             >
               <div class="card-avatar-wrapper"><img :src="char.avatar" /></div>
               <div class="card-name">{{ char.name }}</div>
+              <div v-if="store.tracks.some(t => t.id === char.id)" class="in-team-tag"></div>
             </div>
           </div>
         </template>
@@ -925,6 +944,13 @@ onMounted(() => {
 .tick-label { position: absolute; left: 3px; bottom: 1px; white-space: nowrap; font-family: 'Roboto Mono', monospace; font-size: 10px; color: #888; user-select: none; pointer-events: none; line-height: 1; }
 .tick-line.major .tick-label { color: #e0e0e0; font-weight: bold; font-size: 11px; }
 
+.trigger-avatar-box {
+  position: relative;
+  margin-right: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .cursor-guide {
   position: absolute;
   top: 0;
@@ -983,4 +1009,25 @@ onMounted(() => {
 .prep-zone-controls { position: absolute; left: 0; top: auto; bottom: 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; pointer-events: none; z-index: 6; transform: translateX(-50%); }.prep-mini-btn { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; padding: 0; border: none; background: transparent; color: rgba(255, 255, 255, 0.85); cursor: pointer; border-radius: 6px; outline: none; transition: color 0.12s ease; pointer-events: auto; }.prep-mini-btn:hover { color: #ffd700; }.prep-duration-popover { position: absolute; top: 6px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(0, 0, 0, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); z-index: 50; }.prep-duration-input { width: 72px; height: 22px; background: rgba(255, 255, 255, 0.06); color: #fff; border: 1px solid rgba(255, 255, 255, 0.18); outline: none; padding: 0 6px; font-family: 'Roboto Mono', monospace; font-size: 12px; }.prep-duration-input:focus { border-color: rgba(255, 215, 0, 0.7); }.prep-duration-unit { color: rgba(255, 255, 255, 0.6); font-size: 12px; font-family: 'Roboto Mono', monospace; }
 
 .selection-box-overlay { position: absolute; background: rgba(255, 215, 0, 0.15); border: 1px solid #ffd700; pointer-events: none; z-index: 100; }
+
+/* ==========================================================================
+   新增样式追加区
+   ========================================================================== */
+.avatar-change-hint {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background-color: rgba(0, 0, 0, 0.6); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+}
+.trigger-avatar-box:hover .avatar-change-hint { opacity: 1; }
+.trigger-avatar-box:hover .avatar-image { border-color: #ffd700; }
+
+.in-team-tag {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.75); color: #ffd700;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 10px; letter-spacing: 1px;
+  border: 1px solid rgba(255, 215, 0, 0.5); z-index: 5; pointer-events: none;
+}
+.in-team-tag::before { content: 'FILLED\A已上场'; margin-bottom: 2px; white-space: pre; }
 </style>
