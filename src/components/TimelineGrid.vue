@@ -3,7 +3,6 @@ import { ref, provide, onMounted, onUnmounted, nextTick, computed, watch } from 
 import { refThrottled } from '@vueuse/core'
 import { useTimelineStore } from '../stores/timelineStore.js'
 import ActionItem from './ActionItem.vue'
-import GaugeOverlay from './GaugeOverlay.vue'
 import ContextMenu from './ContextMenu.vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
@@ -117,17 +116,40 @@ const CHARACTERISTIC_FILTERS = computed(() => [
 ])
 
 function openCharacterSelector(index) {
-  targetTrackIndex.value = index; searchQuery.value = ''; filterCharacteristic.value = 'ALL'; isSelectorVisible.value = true
+  targetTrackIndex.value = index
+  searchQuery.value = ''
+  filterCharacteristic.value = 'ALL'
+  isSelectorVisible.value = true
 }
 
 function confirmCharacterSelection(charId) {
-  if (targetTrackIndex.value !== null) store.changeTrackOperator(targetTrackIndex.value, store.tracks[targetTrackIndex.value].id, charId)
-  isSelectorVisible.value = false
+  if (targetTrackIndex.value === null) return
+  
+  const track = store.tracks[targetTrackIndex.value]
+  if (track && track.id !== charId) {
+    track.id = charId
+    track.actions = [] // 切换干员清空旧技能
+    store.commitState()
+  }
+  
+  isSelectorVisible.value = false // 显式关闭
 }
 
 function removeOperator() {
-  if (targetTrackIndex.value !== null) store.clearTrack(targetTrackIndex.value)
+  if (targetTrackIndex.value === null) return
+  const track = store.tracks[targetTrackIndex.value]
+  if (track) {
+    track.id = null
+    track.actions = []
+    store.commitState()
+  }
   isSelectorVisible.value = false
+}
+
+// 弹窗关闭后的彻底清理
+function handleSelectorClosed() {
+  targetTrackIndex.value = null
+  searchQuery.value = ''
 }
 
 const filteredListFlat = computed(() => {
@@ -362,7 +384,7 @@ const fakeScrollbarRef = ref(null)
 let ticking = false
 function onFakeScroll(e) {
   if (ticking) return
-  ticking = true; setLocalTimelineShift(e.target.scrollLeft) // 已替换
+  ticking = true; setLocalTimelineShift(e.target.scrollLeft) 
   requestAnimationFrame(() => { ticking = false })
 }
 
@@ -389,7 +411,7 @@ const panStartShift = ref(0)
 function onPanMouseMove(evt) {
   if (!isPanning.value) return
   const deltaX = evt.clientX - panStartX.value
-  setLocalTimelineShift(panStartShift.value - deltaX) // 已替换
+  setLocalTimelineShift(panStartShift.value - deltaX)
 }
 
 function onPanMouseUp(evt) {
@@ -459,14 +481,14 @@ function adjustZoom(delta, anchorTime = null) {
   if (anchorTime === null) anchorTime = store.pxToTime(store.timelineShift + store.timelineRect.width / 2)
   const offset = store.timeToPx(anchorTime) - store.timelineShift
   store.setBaseBlockWidth(oldWidth + delta)
-  setLocalTimelineShift(store.timeToPx(anchorTime) - offset) // 已替换
+  setLocalTimelineShift(store.timeToPx(anchorTime) - offset)
 }
 
 function handleWheel(e) { if (e.ctrlKey) { e.preventDefault(); adjustZoom(e.deltaY < 0 ? Math.round(store.timeBlockWidth * 0.15) : -Math.round(store.timeBlockWidth * 0.15), store.cursorCurrentTime) } }
 function handleTrackWheel(e) {
   if (ticking) return
   if (e.ctrlKey) return handleWheel(e)
-  if (Math.abs(e.deltaX) > 0 || e.shiftKey) { e.preventDefault(); setLocalTimelineShift(store.timelineShift + (e.shiftKey ? e.deltaY : e.deltaX)) } // 已替换
+  if (Math.abs(e.deltaX) > 0 || e.shiftKey) { e.preventDefault(); setLocalTimelineShift(store.timelineShift + (e.shiftKey ? e.deltaY : e.deltaX)) }
 }
 
 const alignGuide = ref({ visible: false, x: 0, top: 0, height: 0, label: '', type: '', color: '', iconKey: '', targetRect: null })
@@ -548,7 +570,7 @@ function onWindowMouseMove(evt) {
   autoScrollSpeed.value = evt.clientX < r.left + SCROLL_ZONE ? -MAX_SCROLL_SPEED : (evt.clientX > r.right - SCROLL_ZONE ? MAX_SCROLL_SPEED : 0)
   if (autoScrollSpeed.value !== 0 && !autoScrollRaf) autoScrollRaf = requestAnimationFrame(function scroll() {
     if (!autoScrollSpeed.value) return autoScrollRaf = null
-    setLocalTimelineShift(store.timelineShift + autoScrollSpeed.value); // 已替换
+    setLocalTimelineShift(store.timelineShift + autoScrollSpeed.value); 
     updateDragPosition(lastMouseX); autoScrollRaf = requestAnimationFrame(scroll)
   })
   if (!autoScrollSpeed.value) updateDragPosition(evt.clientX)
@@ -675,7 +697,6 @@ onMounted(() => {
         <div class="tracks-content">
           <div v-for="(track, index) in store.tracks" :key="index" class="track-row" :id="`track-row-${index}`" :style="{ '--track-height': `${TRACK_HEIGHT}px` }" @dragover.prevent @drop="onTrackDrop(track, $event)">
             <div class="track-lane" :style="getTrackLaneStyle" ref="trackLaneRefs" :data-track-index="index">
-              <GaugeOverlay v-if="track.id" :track-id="track.id"/>
               <div class="actions-container">
                 <ActionItem v-memo="[action]" v-for="action in track.actions" :key="action.instanceId" :action="action" @mousedown="onActionMouseDown($event, track, action)" @mousemove="updateAlignGuide($event, action)" @mouseleave="hideAlignGuide" />
               </div>
@@ -689,7 +710,15 @@ onMounted(() => {
       <div class="scrollbar-spacer" :style="{ width: `${totalWidthComputed}px` }"></div>
     </div>
 
-    <el-dialog v-model="isSelectorVisible" :title="t('timelineGrid.operatorDialog.title')" width="600px" align-center class="char-selector-dialog" :append-to-body="true">
+    <el-dialog 
+      v-model="isSelectorVisible" 
+      :title="t('timelineGrid.operatorDialog.title')" 
+      width="600px" 
+      align-center 
+      class="char-selector-dialog" 
+      :append-to-body="true"
+      @closed="handleSelectorClosed"
+    >
       <div class="selector-header">
         <el-input v-model="searchQuery" :prefix-icon="Search" clearable style="width: 200px" />
         <button class="ea-btn ea-btn--glass-cut-danger" @click="removeOperator">{{ t('common.unequip') }}</button>
@@ -701,7 +730,13 @@ onMounted(() => {
         <template v-for="group in rosterByRarity" :key="group.level">
           <div class="rarity-header" :style="{ color: getRarityBaseColor(group.level) }"><span>{{ group.level }} ★</span></div>
           <div class="roster-grid">
-            <div v-for="char in group.list" :key="char.id" class="roster-card" @click="confirmCharacterSelection(char.id)">
+            <div 
+              v-for="char in group.list" 
+              :key="char.id" 
+              class="roster-card" 
+              :data-rarity="char.rarity"
+              @click="confirmCharacterSelection(char.id)"
+            >
               <div class="card-avatar-wrapper"><img :src="char.avatar" /></div>
               <div class="card-name">{{ char.name }}</div>
             </div>
@@ -713,6 +748,128 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* ==========================================================================
+   Character Selector Dialog - 精准样式恢复
+   ========================================================================== */
+.selector-header {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.element-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.roster-scroll-container {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+.roster-scroll-container::-webkit-scrollbar { width: 6px; }
+.roster-scroll-container::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+
+.rarity-header {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 15px 0 10px;
+  border-bottom: 1px solid #444;
+  padding-bottom: 4px;
+}
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 12px;
+}
+.roster-card {
+  background: #2b2b2b;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 10px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.roster-card:hover {
+  background: #363636;
+  transform: translateY(-4px);
+}
+
+/* 稀有度颜色及发光特效 */
+.roster-card[data-rarity="6"]:hover {
+  border-color: #ffd700;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+}
+.roster-card[data-rarity="6"]:hover .card-avatar-wrapper {
+  border-color: #ffd700;
+}
+
+.roster-card[data-rarity="5"]:hover {
+  border-color: #ffc400;
+  box-shadow: 0 0 12px rgba(255, 196, 0, 0.3);
+}
+.roster-card[data-rarity="5"]:hover .card-avatar-wrapper {
+  border-color: #ffc400;
+}
+
+.roster-card[data-rarity="4"]:hover {
+  border-color: #d8b4fe;
+  box-shadow: 0 0 12px rgba(216, 180, 254, 0.3);
+}
+.roster-card[data-rarity="4"]:hover .card-avatar-wrapper {
+  border-color: #d8b4fe;
+}
+
+.card-avatar-wrapper {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  transition: border-color 0.25s;
+  background: #1a1a1a;
+}
+.card-avatar-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.card-name {
+  font-size: 12px;
+  color: #e0e0e0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+/* ==========================================================================
+   Element Plus Overrides
+   ========================================================================== */
+:deep(.char-selector-dialog) {
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 8px;
+}
+:deep(.char-selector-dialog .el-dialog__title) { color: #fff; }
+:deep(.char-selector-dialog .el-dialog__header) { border-bottom: 1px solid #333; margin-right: 0; padding-bottom: 15px; }
+:deep(.char-selector-dialog .el-dialog__body) { padding-top: 10px; }
+:deep(.char-selector-dialog .el-input__wrapper) { background-color: #2b2b2b; box-shadow: 0 0 0 1px #444 inset; }
+:deep(.char-selector-dialog .el-input__inner) { color: #fff; }
+
+/* ==========================================================================
+   Timeline Grid Layout
+   ========================================================================== */
 .timeline-grid-layout { display: grid; grid-template-columns: 180px 1fr; grid-template-rows: var(--grid-row-height, 60px) 1fr 14px; width: 100%; height: 100%; overflow: hidden; user-select: none; }
 
 .corner-placeholder { 
