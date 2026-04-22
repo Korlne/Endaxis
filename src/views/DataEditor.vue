@@ -32,14 +32,11 @@ const CHARACTERISTICS = [
   { label: '命破', value: 'Rupture' }
 ]
 
-const ATTACK_SEGMENT_COUNT = 5
-
 // === 状态与计算属性 ===
 
 const searchQuery = ref('')
 const selectedCharId = ref(null)
 const activeTab = ref('basic')
-const attackSegmentIndex = ref(0)
 const linkSegmentIndex = ref(0)
 
 const filteredRoster = computed(() => {
@@ -58,47 +55,43 @@ const selectedChar = computed(() => {
   return characterRoster.value.find(c => c.id === selectedCharId.value)
 })
 
-const currentAttackSegment = computed(() => {
-  const char = selectedChar.value
-  if (!char || !Array.isArray(char.attack_segments)) return null
-  return char.attack_segments[attackSegmentIndex.value] || null
-})
-
 // === 核心方法 ===
 
-function ensureAttackSegments(char) {
-  if (!char) return
-  
-  const base = {
+function createDefaultSegment() {
+  return {
     duration: 0,
     gaugeGain: 0,
     hit_ticks: [],
     cancel_windows: { combo: 0, dodge: 0, skill: 0, swap: 0 }
   }
+}
 
-  if (!Array.isArray(char.attack_segments)) {
-    char.attack_segments = Array.from({ length: ATTACK_SEGMENT_COUNT }, () => JSON.parse(JSON.stringify(base)))
-    return
-  }
-
-  if (char.attack_segments.length !== ATTACK_SEGMENT_COUNT) {
-    char.attack_segments = char.attack_segments.slice(0, ATTACK_SEGMENT_COUNT)
-    while (char.attack_segments.length < ATTACK_SEGMENT_COUNT) {
-      char.attack_segments.push(JSON.parse(JSON.stringify(base)))
+function ensureDynamicSegments(char) {
+  if (!char) return
+  const types = ['basic_attack_segments', 'special_attack_segments']
+  types.forEach(type => {
+    if (!Array.isArray(char[type])) {
+      char[type] = []
     }
-  }
+    char[type].forEach(seg => {
+      seg.duration = Number(seg.duration) || 0
+      if (!seg.cancel_windows) {
+        seg.cancel_windows = { combo: 0, dodge: 0, skill: 0, swap: 0 }
+      }
+    })
+  })
+}
 
-  for (const seg of char.attack_segments) {
-    seg.duration = Number(seg.duration) || 0
-    seg.gaugeGain = Number(seg.gaugeGain) || 0
-    if (!Array.isArray(seg.hit_ticks)) seg.hit_ticks = []
-    if (!seg.cancel_windows || typeof seg.cancel_windows !== 'object') {
-      seg.cancel_windows = { combo: 0, dodge: 0, skill: 0, swap: 0 }
-    }
-    delete seg.allowed_types
-    delete seg.anomalies
-    delete seg.damage_ticks
-  }
+function addSegment(tabType) {
+  const field = `${tabType}_segments`
+  if (!selectedChar.value[field]) selectedChar.value[field] = []
+  selectedChar.value[field].push(createDefaultSegment())
+}
+
+function updateTicks(seg, value) {
+  seg.hit_ticks = value.split(',')
+    .map(v => Number(v.trim()))
+    .filter(v => !isNaN(v))
 }
 
 function ensureLinkSegments(char, { force = false } = {}) {
@@ -114,9 +107,6 @@ function ensureLinkSegments(char, { force = false } = {}) {
     if (!seg.cancel_windows || typeof seg.cancel_windows !== 'object') {
       seg.cancel_windows = { combo: 0, dodge: 0, skill: 0, swap: 0 }
     }
-    delete seg.allowed_types
-    delete seg.anomalies
-    delete seg.damage_ticks
   }
 
   const seed = (suffix, cooldownOverride) => ({
@@ -158,7 +148,9 @@ function addNewCharacter() {
     element: "Physical", 
     characteristic: "Attack", 
     avatar: "/avatars/default.webp",
-    variants: []
+    variants: [],
+    basic_attack_segments: [],
+    special_attack_segments: []
   }
   characterRoster.value.unshift(newChar)
   selectedCharId.value = newId
@@ -215,8 +207,18 @@ function normalizeCharacterForSave(char) {
     delete char[`${type}_allowed_types`]
   })
 
-  ensureAttackSegments(char)
-  
+  // 动态段数清洗
+  ;['basic_attack_segments', 'special_attack_segments'].forEach(field => {
+    if (Array.isArray(char[field])) {
+      char[field].forEach(seg => {
+        seg.duration = Number(seg.duration) || 0
+        seg.hit_ticks = (seg.hit_ticks || []).map(v => Number(v) || 0)
+        if (!seg.cancel_windows) seg.cancel_windows = { combo: 0, dodge: 0, skill: 0, swap: 0 }
+      })
+    }
+  })
+
+  // 连携清洗
   if (Array.isArray(char.link_segments)) {
     for (const seg of char.link_segments) {
       if (!seg || typeof seg !== 'object') continue
@@ -227,12 +229,11 @@ function normalizeCharacterForSave(char) {
       if (!Array.isArray(seg.hit_ticks)) seg.hit_ticks = []
       seg.hit_ticks = seg.hit_ticks.map(v => Number(v) || 0)
       if (!seg.cancel_windows) seg.cancel_windows = { combo: 0, dodge: 0, skill: 0, swap: 0 }
-      delete seg.damage_ticks
-      delete seg.anomalies
-      delete seg.allowed_types
     }
   }
 
+  // 清理过时字段
+  delete char.attack_segments
   delete char.attack_duration
   delete char.attack_gaugeGain
   delete char.attack_allowed_types
@@ -264,9 +265,8 @@ function saveData() {
 }
 
 watch(selectedCharId, () => {
-  attackSegmentIndex.value = 0
   if (!selectedChar.value) return
-  ensureAttackSegments(selectedChar.value)
+  ensureDynamicSegments(selectedChar.value)
   ensureLinkSegments(selectedChar.value)
   if (!Array.isArray(selectedChar.value.variants)) selectedChar.value.variants = []
 }, { immediate: true })
@@ -322,9 +322,9 @@ watch(selectedCharId, () => {
         </header>
 
         <div class="cms-tabs">
-          <button v-for="t in ['basic', 'attack', 'skill', 'link', 'ultimate', 'variants']" 
+          <button v-for="t in ['basic', 'basic_attack', 'special_attack', 'dodge', 'link', 'ultimate', 'variants']" 
                   :key="t" :class="{ active: activeTab === t }" @click="activeTab = t">
-            {{ {basic:'基础信息', attack:'重击', skill:'战技', link:'连携', ultimate:'终结技', variants:'变体'}[t] }}
+            {{ {basic:'基础', basic_attack:'普通攻击', special_attack:'特殊技', dodge:'闪避', link:'连携', ultimate:'终结技', variants:'变体'}[t] }}
           </button>
         </div>
 
@@ -356,45 +356,70 @@ watch(selectedCharId, () => {
             </div>
           </div>
 
-          <div v-show="['attack', 'skill', 'link', 'ultimate'].includes(activeTab)">
+          <div v-show="['basic_attack', 'special_attack'].includes(activeTab)">
             <div class="form-section">
-              <h3 class="section-title">帧数据与取消窗口 (Tick)</h3>
-              <template v-if="activeTab === 'attack' && currentAttackSegment">
-                <div class="form-group full-width" style="margin-bottom: 15px;">
-                  <label>Hit Ticks (用逗号分隔，例如: 12, 24, 36)</label>
-                  <input type="text" :value="(currentAttackSegment.hit_ticks || []).join(', ')" @change="e => currentAttackSegment.hit_ticks = e.target.value.split(',').map(v => Number(v.trim())).filter(v => !isNaN(v))" />
+              <div class="section-header">
+                <h3 class="section-title">{{ activeTab === 'basic_attack' ? '普攻连段 (A1, A2...)' : '特殊技连段 (E1, E2...)' }}</h3>
+                <button class="ea-btn ea-btn--sm ea-btn--fill-success" @click="addSegment(activeTab)">+ 添加段数</button>
+              </div>
+              
+              <div v-for="(seg, idx) in selectedChar[`${activeTab}_segments`]" :key="idx" class="segment-card">
+                <div class="segment-header">
+                  <span>第 {{ idx + 1 }} 段 ({{ activeTab === 'basic_attack' ? 'A' : 'E' }}{{ idx + 1 }})</span>
+                  <button class="ea-btn ea-btn--sm ea-btn--fill-danger" @click="selectedChar[`${activeTab}_segments`].splice(idx, 1)">删除</button>
                 </div>
-                <div class="form-grid four-col" v-if="currentAttackSegment.cancel_windows">
-                  <div class="form-group"><label>Combo Cancel</label><input type="number" v-model.number="currentAttackSegment.cancel_windows.combo"></div>
-                  <div class="form-group"><label>Dodge Cancel</label><input type="number" v-model.number="currentAttackSegment.cancel_windows.dodge"></div>
-                  <div class="form-group"><label>Skill Cancel</label><input type="number" v-model.number="currentAttackSegment.cancel_windows.skill"></div>
-                  <div class="form-group"><label>Swap Cancel</label><input type="number" v-model.number="currentAttackSegment.cancel_windows.swap"></div>
+                <div class="form-grid">
+                  <div class="form-group"><label>时长(s)</label><input type="number" step="0.01" v-model.number="seg.duration" /></div>
+                  <div class="form-group full-width">
+                    <label>Hit Ticks (逗号分隔)</label>
+                    <input type="text" :value="(seg.hit_ticks || []).join(', ')" @change="e => updateTicks(seg, e.target.value)" />
+                  </div>
+                  <div class="form-grid four-col">
+                    <div v-for="win in ['combo', 'dodge', 'skill', 'swap']" :key="win" class="form-group">
+                      <label>{{ win }} Cancel</label>
+                      <input type="number" v-model.number="seg.cancel_windows[win]" />
+                    </div>
+                  </div>
                 </div>
-              </template>
+              </div>
+              <div v-if="!selectedChar[`${activeTab}_segments`]?.length" class="empty-hint">暂无连段数据，请点击上方按钮添加。</div>
+            </div>
+          </div>
 
-              <template v-else-if="activeTab === 'link' && Array.isArray(selectedChar.link_segments)">
-                <div class="form-group full-width" style="margin-bottom: 15px;">
+          <div v-show="['link', 'ultimate', 'dodge', 'skill'].includes(activeTab)">
+            <div class="form-section">
+              <h3 class="section-title">技能帧数据 ({{ activeTab }})</h3>
+              
+              <template v-if="activeTab === 'link' && Array.isArray(selectedChar.link_segments)">
+                <div class="link-selector">
+                  <button v-for="(_, i) in selectedChar.link_segments" :key="i" 
+                          :class="{ active: linkSegmentIndex === i }" @click="linkSegmentIndex = i">
+                    第 {{ i + 1 }} 段
+                  </button>
+                </div>
+                <div class="form-group full-width">
                   <label>Hit Ticks (用逗号分隔)</label>
-                  <input type="text" :value="(selectedChar.link_segments[linkSegmentIndex].hit_ticks || []).join(', ')" @change="e => selectedChar.link_segments[linkSegmentIndex].hit_ticks = e.target.value.split(',').map(v => Number(v.trim())).filter(v => !isNaN(v))" />
+                  <input type="text" :value="(selectedChar.link_segments[linkSegmentIndex].hit_ticks || []).join(', ')" @change="e => updateTicks(selectedChar.link_segments[linkSegmentIndex], e.target.value)" />
                 </div>
                 <div class="form-grid four-col" v-if="selectedChar.link_segments[linkSegmentIndex].cancel_windows">
-                  <div class="form-group"><label>Combo Cancel</label><input type="number" v-model.number="selectedChar.link_segments[linkSegmentIndex].cancel_windows.combo"></div>
-                  <div class="form-group"><label>Dodge Cancel</label><input type="number" v-model.number="selectedChar.link_segments[linkSegmentIndex].cancel_windows.dodge"></div>
-                  <div class="form-group"><label>Skill Cancel</label><input type="number" v-model.number="selectedChar.link_segments[linkSegmentIndex].cancel_windows.skill"></div>
-                  <div class="form-group"><label>Swap Cancel</label><input type="number" v-model.number="selectedChar.link_segments[linkSegmentIndex].cancel_windows.swap"></div>
+                  <div v-for="win in ['combo', 'dodge', 'skill', 'swap']" :key="win" class="form-group">
+                    <label>{{ win }} Cancel</label>
+                    <input type="number" v-model.number="selectedChar.link_segments[linkSegmentIndex].cancel_windows[win]" />
+                  </div>
                 </div>
               </template>
 
               <template v-else>
                 <div class="form-group full-width" style="margin-bottom: 15px;">
                   <label>Hit Ticks (用逗号分隔)</label>
-                  <input type="text" :value="(selectedChar[`${activeTab}_hit_ticks`] || []).join(', ')" @change="e => { if (!selectedChar[`${activeTab}_hit_ticks`]) selectedChar[`${activeTab}_hit_ticks`] = []; selectedChar[`${activeTab}_hit_ticks`] = e.target.value.split(',').map(v => Number(v.trim())).filter(v => !isNaN(v)) }" />
+                  <input type="text" :value="(selectedChar[`${activeTab}_hit_ticks`] || []).join(', ')" @change="e => { if (!selectedChar[`${activeTab}_hit_ticks`]) selectedChar[`${activeTab}_hit_ticks`] = []; updateTicks(selectedChar, e.target.value, `${activeTab}_hit_ticks`) }" />
                 </div>
                 <div class="form-grid four-col">
-                  <div class="form-group"><label>Combo Cancel</label><input type="number" :value="selectedChar[`${activeTab}_cancel_windows`]?.combo || 0" @input="e => { if(!selectedChar[`${activeTab}_cancel_windows`]) selectedChar[`${activeTab}_cancel_windows`] = {combo:0, dodge:0, skill:0, swap:0}; selectedChar[`${activeTab}_cancel_windows`].combo = Number(e.target.value) }"></div>
-                  <div class="form-group"><label>Dodge Cancel</label><input type="number" :value="selectedChar[`${activeTab}_cancel_windows`]?.dodge || 0" @input="e => { if(!selectedChar[`${activeTab}_cancel_windows`]) selectedChar[`${activeTab}_cancel_windows`] = {combo:0, dodge:0, skill:0, swap:0}; selectedChar[`${activeTab}_cancel_windows`].dodge = Number(e.target.value) }"></div>
-                  <div class="form-group"><label>Skill Cancel</label><input type="number" :value="selectedChar[`${activeTab}_cancel_windows`]?.skill || 0" @input="e => { if(!selectedChar[`${activeTab}_cancel_windows`]) selectedChar[`${activeTab}_cancel_windows`] = {combo:0, dodge:0, skill:0, swap:0}; selectedChar[`${activeTab}_cancel_windows`].skill = Number(e.target.value) }"></div>
-                  <div class="form-group"><label>Swap Cancel</label><input type="number" :value="selectedChar[`${activeTab}_cancel_windows`]?.swap || 0" @input="e => { if(!selectedChar[`${activeTab}_cancel_windows`]) selectedChar[`${activeTab}_cancel_windows`] = {combo:0, dodge:0, skill:0, swap:0}; selectedChar[`${activeTab}_cancel_windows`].swap = Number(e.target.value) }"></div>
+                  <div v-for="win in ['combo', 'dodge', 'skill', 'swap']" :key="win" class="form-group">
+                    <label>{{ win }} Cancel</label>
+                    <input type="number" :value="selectedChar[`${activeTab}_cancel_windows`]?.[win] || 0" 
+                           @input="e => { if(!selectedChar[`${activeTab}_cancel_windows`]) selectedChar[`${activeTab}_cancel_windows`] = {combo:0, dodge:0, skill:0, swap:0}; selectedChar[`${activeTab}_cancel_windows`][win] = Number(e.target.value) }">
+                  </div>
                 </div>
               </template>
             </div>
@@ -402,16 +427,16 @@ watch(selectedCharId, () => {
 
           <div v-show="activeTab === 'variants'">
             <div class="form-section">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin: 25px 0 15px;">
-                <h3 class="section-title" style="margin: 0;">变体与自定义动作</h3>
+              <div class="section-header">
+                <h3 class="section-title">变体与自定义动作</h3>
                 <button class="ea-btn ea-btn--sm ea-btn--fill-success" @click="addVariant">+ 添加变体</button>
               </div>
-              <div v-for="(v, vIdx) in selectedChar.variants" :key="v.id" style="border: 1px solid #333; padding: 15px; border-radius: 4px; margin-bottom: 15px; background: #1a1a1c;">
+              <div v-for="(v, vIdx) in selectedChar.variants" :key="v.id" class="segment-card">
                 <div class="form-grid four-col">
                   <div class="form-group"><label>自定义动作名称</label><input type="text" v-model="v.name"></div>
                   <div class="form-group"><label>持续时间 (秒)</label><input type="number" step="0.01" v-model.number="v.duration"></div>
                   <div class="form-group full-width"><label>Hit Ticks (用逗号分隔)</label>
-                    <input type="text" :value="(v.hit_ticks || []).join(', ')" @change="e => v.hit_ticks = e.target.value.split(',').map(n => Number(n.trim())).filter(n => !isNaN(n))">
+                    <input type="text" :value="(v.hit_ticks || []).join(', ')" @change="e => updateTicks(v, e.target.value)">
                   </div>
                 </div>
                 <div style="margin-top: 15px;">
@@ -420,17 +445,14 @@ watch(selectedCharId, () => {
                     <button class="ea-btn ea-btn--sm ea-btn--outline-muted" @click="v.cancel_windows.push({name: '新窗口', time: 0})">添加窗口</button>
                   </div>
                   <div v-for="(cw, cwIdx) in v.cancel_windows" :key="cwIdx" style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center;">
-                    <input type="text" v-model="cw.name" placeholder="窗口名称 (如 dodge)" style="background: #16161a; border: 1px solid #333; color: #fff; padding: 6px; flex: 1; border-radius: 4px;">
-                    <input type="number" step="0.01" v-model.number="cw.time" placeholder="数值/帧数" style="background: #16161a; border: 1px solid #333; color: #fff; padding: 6px; width: 120px; border-radius: 4px;">
+                    <input type="text" v-model="cw.name" placeholder="窗口名称" class="mini-input" style="flex: 1;">
+                    <input type="number" step="0.01" v-model.number="cw.time" placeholder="帧数" class="mini-input" style="width: 120px;">
                     <button class="ea-btn ea-btn--sm ea-btn--fill-danger" @click="v.cancel_windows.splice(cwIdx, 1)">删除</button>
                   </div>
                 </div>
                 <div style="text-align: right; margin-top: 10px;">
                   <button class="ea-btn ea-btn--sm ea-btn--fill-danger" @click="selectedChar.variants.splice(vIdx, 1)">删除此变体</button>
                 </div>
-              </div>
-              <div v-if="!selectedChar.variants || selectedChar.variants.length === 0" style="color: #666; font-size: 12px; text-align: center; padding: 20px;">
-                暂无自定义变体动作
               </div>
             </div>
           </div>
@@ -451,14 +473,26 @@ watch(selectedCharId, () => {
 .rarity-6-border { border-color: #FFD700; }
 .rarity-4-border { border-color: #d8b4fe; }
 .cms-content { flex-grow: 1; overflow-y: auto; padding: 30px; }
+
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.section-title { border-left: 4px solid #4fc3f7; padding-left: 10px; font-size: 16px; margin: 0; }
+
+.segment-card { border: 1px solid #333; padding: 15px; border-radius: 4px; margin-bottom: 15px; background: #1a1a1c; }
+.segment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #2a2a2e; color: #4fc3f7; font-weight: bold; }
+
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
 .full-width { grid-column: 1 / -1; }
 .four-col { grid-template-columns: repeat(4, 1fr); }
 .form-group { display: flex; flex-direction: column; }
 .form-group label { margin-bottom: 6px; color: #aaa; font-size: 12px; }
-.form-group input { background: #16161a; border: 1px solid #333; color: #fff; padding: 8px; border-radius: 4px; }
-.section-title { border-left: 4px solid #4fc3f7; padding-left: 10px; margin: 25px 0 15px; font-size: 16px; }
-.cms-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #333; }
-.cms-tabs button { padding: 10px 20px; background: none; border: none; color: #888; cursor: pointer; }
+.form-group input, .mini-input { background: #16161a; border: 1px solid #333; color: #fff; padding: 8px; border-radius: 4px; }
+
+.cms-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #333; overflow-x: auto; }
+.cms-tabs button { padding: 10px 20px; background: none; border: none; color: #888; cursor: pointer; white-space: nowrap; }
 .cms-tabs button.active { color: #fff; border-bottom: 2px solid #4fc3f7; }
+
+.link-selector { display: flex; gap: 8px; margin-bottom: 15px; }
+.link-selector button { background: #252526; border: 1px solid #444; color: #ccc; padding: 4px 12px; border-radius: 4px; cursor: pointer; }
+.link-selector button.active { background: #4fc3f7; color: #000; border-color: #4fc3f7; }
+.empty-hint { color: #666; font-size: 12px; text-align: center; padding: 20px; border: 1px dashed #333; }
 </style>

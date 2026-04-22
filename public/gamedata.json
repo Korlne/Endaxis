@@ -8,86 +8,20 @@
     "ICON_DATABASE": {},
     "characterRoster": [
       {
-        "id": "char_1776769447109",
+        "id": "char_1776857519266",
         "name": "代理人1号",
         "rank": "S",
-        "element": "Physical",
+        "element": "Honed Edge",
         "characteristic": "Attack",
-        "avatar": "/avatars/default.webp",
+        "avatar": "/avatars/YESHUNGUANG/Yeshunguang.webp",
         "variants": [
           {
-            "id": "var_1776771688109",
-            "name": "什么鬼动作A",
+            "id": "var_1776858199708",
+            "name": "自定义动作名称",
             "type": "variant",
-            "duration": 2,
-            "hit_ticks": [
-              10,
-              22,
-              33
-            ],
-            "cancel_windows": [
-              {
-                "name": "Doge",
-                "time": 34
-              }
-            ]
-          }
-        ],
-        "attack_segments": [
-          {
-            "duration": 0,
-            "gaugeGain": 0,
+            "duration": 1,
             "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
-          },
-          {
-            "duration": 0,
-            "gaugeGain": 0,
-            "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
-          },
-          {
-            "duration": 0,
-            "gaugeGain": 0,
-            "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
-          },
-          {
-            "duration": 0,
-            "gaugeGain": 0,
-            "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
-          },
-          {
-            "duration": 0,
-            "gaugeGain": 0,
-            "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
+            "cancel_windows": []
           }
         ],
         "link_segments": [
@@ -156,73 +90,78 @@
           "dodge": 0,
           "skill": 0,
           "swap": 0
-        }
+        },
+        "rarity": 6,
+        "basic_attack_segments": [
+          {
+            "duration": 35,
+            "gaugeGain": 0,
+            "hit_ticks": [
+              13,
+              24
+            ],
+            "cancel_windows": {
+              "combo": 25,
+              "dodge": 10,
+              "skill": 20,
+              "swap": 0
+            }
+          },
+          {
+            "duration": 36,
+            "gaugeGain": 0,
+            "hit_ticks": [
+              9,
+              21,
+              33,
+              84,
+              89,
+              97,
+              1,
+              2,
+              103
+            ],
+            "cancel_windows": {
+              "combo": 30,
+              "dodge": 12,
+              "skill": 30,
+              "swap": 0
+            }
+          }
+        ],
+        "special_attack_segments": [
+          {
+            "duration": 0,
+            "gaugeGain": 0,
+            "hit_ticks": [],
+            "cancel_windows": {
+              "combo": 0,
+              "dodge": 0,
+              "skill": 0,
+              "swap": 0
+            }
+          },
+          {
+            "duration": 0,
+            "gaugeGain": 0,
+            "hit_ticks": [],
+            "cancel_windows": {
+              "combo": 0,
+              "dodge": 0,
+              "skill": 0,
+              "swap": 0
+            }
+          }
+        ]
       },
       {
-        "id": "char_1776769445220",
+        "id": "char_1776857518454",
         "name": "代理人2号",
         "rank": "A",
         "element": "Physical",
         "characteristic": "Attack",
         "avatar": "/avatars/default.webp",
         "variants": [],
-        "attack_segments": [
-          {
-            "duration": 0,
-            "gaugeGain": 0,
-            "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
-          },
-          {
-            "duration": 0,
-            "gaugeGain": 0,
-            "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
-          },
-          {
-            "duration": 0,
-            "gaugeGain": 0,
-            "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
-          },
-          {
-            "duration": 0,
-            "gaugeGain": 0,
-            "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
-          },
-          {
-            "duration": 0,
-            "gaugeGain": 0,
-            "hit_ticks": [],
-            "cancel_windows": {
-              "combo": 0,
-              "dodge": 0,
-              "skill": 0,
-              "swap": 0
-            }
-          }
-        ],
         "link_segments": [
           {
             "name": "新代理人·一段",
@@ -289,7 +228,10 @@
           "dodge": 0,
           "skill": 0,
           "swap": 0
-        }
+        },
+        "rarity": 5,
+        "basic_attack_segments": [],
+        "special_attack_segments": []
       }
     ]
   }

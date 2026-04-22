@@ -205,17 +205,30 @@ const operationMarkers = computed(() => {
     track.actions.forEach(action => {
       if ((action.triggerWindow || 0) < 0) return
       let label = '', isHold = false, customClass = ''
-      if (action.type === 'skill') { label = `${keyNum}`; customClass = 'op-skill' }
-      else if (action.type === 'link') { label = 'E'; customClass = 'op-link' }
-      else if (action.type === 'ultimate') { label = `${keyNum} (Hold)`; isHold = true; customClass = 'op-ultimate' }
-      else return
+      
+      // ZZZ 逻辑标签映射
+      if (action.type === 'basic_attack') { 
+        label = action.name 
+        customClass = 'op-skill' 
+      } else if (action.type === 'special_attack') { 
+        label = action.name 
+        customClass = 'op-skill' 
+      } else if (action.type === 'link') { 
+        label = 'Chain' 
+        customClass = 'op-link' 
+      } else if (action.type === 'ultimate') { 
+        label = 'ULT' 
+        isHold = true 
+        customClass = 'op-ultimate' 
+      } else return
 
       rawMarkers.push({
         id: `op-${action.instanceId}`,
         left: store.timeToPx(action.startTime || 0),
         width: isHold ? null : 24,
         right: store.timeToPx(action.startTime || 0) + (isHold ? (store.timeToPx((action.startTime || 0) + (action.duration || 0)) - store.timeToPx(action.startTime || 0)) : 24),
-        label, isHold, customClass, top: 0, height: 14, fontSize: 9
+        label: label || action.name, 
+        isHold, customClass, top: 0, height: 14, fontSize: 9
       })
     })
 

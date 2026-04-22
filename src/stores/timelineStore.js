@@ -6,10 +6,17 @@ import { i18n } from '@/i18n'
 import { snapMs } from '@/utils/precision.js'
 
 const tr = (key, params) => i18n.global.t(key, params)
+
+// 修改技能类型翻译映射
 const getI18nSkillType = (type) => {
-    const key = `skillType.${type}`
-    const out = tr(key)
-    return out === key ? tr('skillType.unknown') : out
+    const keys = {
+        'basic_attack': '普通攻击',
+        'dodge': '闪避',
+        'special_attack': '特殊技',
+        'link': '连携技',
+        'ultimate': '终结技'
+    }
+    return keys[type] || tr(`skillType.${type}`)
 }
 
 const uid = () => Math.random().toString(36).substring(2, 9)
@@ -119,42 +126,10 @@ function normalizePrepConfig(snapshot) {
 }
 
 function normalizeAttackSegmentsForCharacter(char) {
+    // 此处逻辑在全局重置背景下主要用于确保数组结构存在
     if (!char) return
-
-    const legacy = {
-        duration: Number(char.attack_duration) || 0,
-        gaugeGain: Number(char.attack_gaugeGain) || 0,
-        allowed_types: Array.isArray(char.attack_allowed_types) ? [...char.attack_allowed_types] : [],
-        anomalies: char.attack_anomalies ? JSON.parse(JSON.stringify(char.attack_anomalies)) : [],
-        damage_ticks: char.attack_damage_ticks ? JSON.parse(JSON.stringify(char.attack_damage_ticks)) : [],
-    }
-
-    const sanitizeSeg = (seg, fallback) => {
-        const raw = seg && typeof seg === 'object' ? seg : {}
-        const base = fallback && typeof fallback === 'object' ? fallback : {}
-        return {
-            duration: Number(raw.duration ?? base.duration) || 0,
-            gaugeGain: Number(raw.gaugeGain ?? base.gaugeGain) || 0,
-            allowed_types: Array.isArray(raw.allowed_types) ? raw.allowed_types : (Array.isArray(base.allowed_types) ? [...base.allowed_types] : []),
-            anomalies: raw.anomalies ? JSON.parse(JSON.stringify(raw.anomalies)) : (base.anomalies ? JSON.parse(JSON.stringify(base.anomalies)) : []),
-            damage_ticks: raw.damage_ticks ? JSON.parse(JSON.stringify(raw.damage_ticks)) : (base.damage_ticks ? JSON.parse(JSON.stringify(base.damage_ticks)) : []),
-            element: typeof raw.element === 'string' ? raw.element : (typeof base.element === 'string' ? base.element : undefined),
-            icon: typeof raw.icon === 'string' ? raw.icon : (typeof base.icon === 'string' ? base.icon : undefined),
-        }
-    }
-
-    if (!Array.isArray(char.attack_segments)) {
-        const seg0 = sanitizeSeg(null, legacy)
-        char.attack_segments = Array.from({ length: ATTACK_SEGMENT_COUNT }, (_, idx) => {
-            if (idx === 0) return seg0
-            return sanitizeSeg({ duration: 0 }, seg0)
-        })
-        return
-    }
-
-    const normalized = char.attack_segments.slice(0, ATTACK_SEGMENT_COUNT).map(seg => sanitizeSeg(seg, legacy))
-    while (normalized.length < ATTACK_SEGMENT_COUNT) normalized.push(sanitizeSeg({ duration: 0 }, legacy))
-    char.attack_segments = normalized
+    if (!Array.isArray(char.basic_attack_segments)) char.basic_attack_segments = []
+    if (!Array.isArray(char.special_attack_segments)) char.special_attack_segments = []
 }
 
 export const useTimelineStore = defineStore('timeline', () => {
@@ -345,23 +320,11 @@ export const useTimelineStore = defineStore('timeline', () => {
         return getActionById(nodeId) || getEffectById(nodeId)
     }
 
-    // ==========================================
-    // 代理人上场管理逻辑 (逻辑层重构)
-    // ==========================================
-
-    /**
-     * 判断干员是否已在队伍中 (Getter 替代)
-     */
     const isCharacterInTeam = (charId) => {
         return tracks.value.some(track => track.id === charId)
     }
 
-    /**
-     * 切换轨道干员 (Action 替代)
-     * 逻辑：确保唯一性。如果该干员已经在其他轨道，先将其从原轨道卸下并清空动作。
-     */
     function changeTrackOperator(trackIndex, charId) {
-        // 1. 确保全局唯一
         tracks.value.forEach((t, idx) => {
             if (t.id === charId && idx !== trackIndex) {
                 t.id = null
@@ -369,7 +332,6 @@ export const useTimelineStore = defineStore('timeline', () => {
             }
         })
 
-        // 2. 为目标轨道装载
         const track = tracks.value[trackIndex]
         if (track && track.id !== charId) {
             track.id = charId
@@ -379,9 +341,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         commitState()
     }
 
-    /**
-     * 清空轨道干员 (Action 替代)
-     */
     function clearTrackOperator(trackIndex) {
         const track = tracks.value[trackIndex]
         if (track) {
@@ -623,38 +582,75 @@ export const useTimelineStore = defineStore('timeline', () => {
         if (t == null) return ''; const f = Math.round(t * 60); const s = Math.floor(f / 60); return f % 60 === 0 ? `${s}s` : `${s}s ${(f % 60).toString().padStart(2, '0')}f`
     }
 
+    // 更新技能库计算逻辑
     const activeSkillLibrary = computed(() => {
-        const char = characterRoster.value.find(c => c.id === activeTrackId.value); if (!char) return []
-        const TYPE_ORDER = { 'attack': 1, 'dodge': 2, 'execution': 3, 'skill': 4, 'link': 5, 'ultimate': 6 }
-        const standard = ['attack', 'dodge', 'execution', 'skill', 'link', 'ultimate'].map(type => {
-            if (type === 'attack') {
-                normalizeAttackSegmentsForCharacter(char); const gid = `${char.id}_attack`
-                const segs = char.attack_segments.map((seg, i) => ({
-                    id: `${gid}_seg${i + 1}`, type: 'attack', name: `${getI18nSkillType('attack')} ${i + 1}`, librarySource: 'character', element: seg.element || char.attack_element || char.element || 'physical', icon: seg.icon || '', duration: Number(seg.duration) || 0, gaugeGain: Number(seg.gaugeGain) || 0, damageTicks: seg.damage_ticks || [], allowedTypes: seg.allowed_types || [], physicalAnomaly: seg.anomalies || [], kind: 'attack_segment', attackSegmentIndex: i + 1, hiddenInLibraryGrid: true, ...characterOverrides.value[`${gid}_seg${i + 1}`]
+        const char = characterRoster.value.find(c => c.id === activeTrackId.value); 
+        if (!char) return []
+        
+        // ZZZ 逻辑排序：普攻、闪避、特殊、连携、终结
+        const TYPE_ORDER = { 'basic_attack': 1, 'dodge': 2, 'special_attack': 3, 'link': 4, 'ultimate': 5 }
+        
+        const standard = ['basic_attack', 'dodge', 'special_attack', 'link', 'ultimate'].map(type => {
+            // 1. 处理普通攻击 (多段)
+            if (type === 'basic_attack') {
+                const segments = (char.basic_attack_segments || []).map((seg, i) => ({
+                    id: `${char.id}_basic_seg${i + 1}`,
+                    type: 'basic_attack',
+                    name: `A${i + 1}`,
+                    kind: 'attack_segment',
+                    duration: Number(seg.duration) || 0,
+                    hitTicks: seg.hit_ticks || [],
+                    cancelWindows: seg.cancel_windows || {},
+                    ...seg 
                 }))
-                const enabled = segs.filter(s => s.duration > 0)
-                return { id: gid, type: 'attack', name: getI18nSkillType('attack'), librarySource: 'character', element: char.attack_element || char.element || 'physical', duration: enabled.reduce((a, s) => a + s.duration, 0), kind: 'attack_group', attackSegments: enabled, attackSegmentsAll: segs }
+                return {
+                    id: `${char.id}_basic`,
+                    type: 'basic_attack',
+                    name: getI18nSkillType('basic_attack'),
+                    kind: 'attack_group',
+                    attackSegments: segments.filter(s => s.duration > 0)
+                }
             }
-            if (type === 'dodge') return { id: `${char.id}_dodge`, type: 'dodge', name: getI18nSkillType('dodge'), librarySource: 'character', duration: Number(char.dodge_duration) || 0.5, damageTicks: [], physicalAnomaly: [], ...characterOverrides.value[`${char.id}_dodge`] }
-            const suffix = type; const gid = `${char.id}_${suffix}`; const over = characterOverrides.value[gid] || {}
-            const base = {
-                id: gid, type, name: getI18nSkillType(type), librarySource: 'character', element: char[`${suffix}_element`] || char.element || 'physical', duration: char[`${suffix}_duration`] || 1, cooldown: char[`${suffix}_cooldown`] || 0, icon: char[`${suffix}_icon`] || "", spCost: suffix === 'skill' ? (char.skill_spCost || systemConstants.value.skillSpCostDefault) : 0, gaugeCost: suffix === 'ultimate' ? (char.ultimate_gaugeMax || 100) : 0, gaugeGain: char[`${suffix}_gaugeGain`] || (suffix === 'ultimate' ? (char.ultimate_gaugeReply || 0) : 0), teamGaugeGain: char[`${suffix}_teamGaugeGain`] || 0, enhancementTime: suffix === 'ultimate' ? (char.ultimate_enhancementTime || 0) : 0, animationTime: suffix === 'ultimate' ? (char.ultimate_animationTime || 0.5) : 0, damageTicks: char[`${suffix}_damage_ticks`] || [], allowedTypes: char[`${suffix}_allowed_types`] || [], physicalAnomaly: char[`${suffix}_anomalies`] || [], ...over
+            
+            // 2. 处理特殊技 (多段)
+            if (type === 'special_attack') {
+                const segments = (char.special_attack_segments || []).map((seg, i) => ({
+                    id: `${char.id}_special_seg${i + 1}`,
+                    type: 'special_attack',
+                    name: `E${i + 1}`,
+                    kind: 'attack_segment',
+                    duration: Number(seg.duration) || 0,
+                    hitTicks: seg.hit_ticks || [],
+                    cancelWindows: seg.cancel_windows || {},
+                    ...seg
+                }))
+                return {
+                    id: `${char.id}_special`,
+                    type: 'special_attack',
+                    name: getI18nSkillType('special_attack'),
+                    kind: 'attack_group',
+                    attackSegments: segments.filter(s => s.duration > 0)
+                }
             }
-            if (suffix === 'link' && char.link_segments?.length >= 2) {
-                base.segments = char.link_segments.filter(Boolean).map((s, i) => ({ id: `${gid}_seg${i + 1}`, type: 'link', name: s.name || `${base.name} ${i + 1}`, librarySource: 'character', element: s.element || base.element, icon: s.icon || base.icon, duration: Number(s.duration) || 0, cooldown: Number(s.cooldown) || 0, gaugeGain: Number(s.gaugeGain) || 0, followupDelay: snapMs(Math.max(0, Number(s.followup_delay) || 0)), damageTicks: s.damage_ticks || [], allowedTypes: s.allowed_types || [], physicalAnomaly: s.anomalies || [], ...characterOverrides.value[`${gid}_seg${i + 1}`] }))
-                base.duration = base.segments.reduce((a, s) => a + s.duration + (s.followupDelay || 0), 0)
+
+            // 3. 闪避/连携/终结技 (单段)
+            const suffix = type;
+            const data = char[suffix] || {};
+            return {
+                id: `${char.id}_${type}`,
+                type,
+                name: getI18nSkillType(type),
+                duration: data.duration || 1,
+                hitTicks: data.hit_ticks || [],
+                cancelWindows: data.cancel_windows || { combo: 0, dodge: 0, skill: 0, swap: 0 }
             }
-            return base
         })
-        return [...standard, ...(char.variants || []).map(v => {
-            const gid = `${char.id}_variant_${v.id}`; const over = characterOverrides.value[gid] || {}
-            return { id: gid, librarySource: 'character', element: char.element || 'physical', ...v, ...over }
-        })].sort((a, b) => (TYPE_ORDER[a.type] || 99) - (TYPE_ORDER[b.type] || 99))
+
+        return [...standard, ...(char.variants || [])].sort((a, b) => (TYPE_ORDER[a.type] || 99) - (TYPE_ORDER[b.type] || 99))
     })
 
     function setTimelineShift(v) { timelineShift.value = Math.min(Math.max(0, v), totalTimelineWidthPx.value - timelineRect.value.width) }
     function selectTrack(tid) { activeTrackId.value = tid; clearSelection() }
-    function selectAction(id) { const same = id === selectedActionId.value; clearSelection(); if (!same) { selectedActionId.value = id; multiSelectedIds.value.add(id) } }
     
     function clearSelection() { 
         selectedActionId.value = selectedAnomalyId.value = selectedCycleBoundaryId.value = selectedSwitchEventId.value = null; 
@@ -694,11 +690,9 @@ export const useTimelineStore = defineStore('timeline', () => {
         if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= tracks.value.length || toIndex >= tracks.value.length) {
             return
         }
-
         const temp = tracks.value[fromIndex]
         tracks.value[fromIndex] = tracks.value[toIndex]
         tracks.value[toIndex] = temp
-
         commitState()
     }
 
@@ -863,7 +857,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         timeToPx, pxToTime, formatAxisTimeLabel, setPrepDuration,
         globalExtensions, getShiftedEndTime, refreshAllActionShifts,
 
-        // 新增/修改的方法
         isCharacterInTeam, changeTrackOperator, clearTrackOperator, moveTrack, setDraggingSkill, selectAction
     }
 })
