@@ -38,21 +38,13 @@ const displayLabel = computed(() => {
   }
 
   if (props.action.kind === 'attack_segment') {
-    const total = Number(props.action.attackSequenceTotal) || 0
-    const idx = Number(props.action.attackSequenceIndex) || 0
-
-    if (total > 0 && idx > 0) {
-      if (idx === total) {
-        const groupName = props.action.attackGroupName || (name ? name.replace(/\s*\d+\s*$/, '') : t('skillType.attack'))
-        return `${groupName}${suffix}`
-      }
-      return `A${idx}${suffix}`
+      // 直接使用 Store 中赋予的真实名称 (如 A1, E2) 和连携后缀
+      return `${name}${suffix}`
     }
-  }
 
-  if (width >= 30) return `${name}${suffix}`
-  return `${TYPE_SHORTHAND[type] || '?'}${suffix}`
-})
+    if (width >= 30) return `${name}${suffix}`
+    return `${TYPE_SHORTHAND[type] || '?'}${suffix}`
+  })
 
 const isSelected = computed(() => store.isActionSelected(props.action.instanceId))
 

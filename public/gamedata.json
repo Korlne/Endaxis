@@ -17,9 +17,9 @@
         "variants": [
           {
             "id": "var_1776858199708",
-            "name": "自定义动作名称",
+            "name": "当当当",
             "type": "variant",
-            "duration": 1,
+            "duration": 2,
             "hit_ticks": [],
             "cancel_windows": []
           }

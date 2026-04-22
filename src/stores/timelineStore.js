@@ -596,12 +596,12 @@ export const useTimelineStore = defineStore('timeline', () => {
                 const segments = (char.basic_attack_segments || []).map((seg, i) => ({
                     id: `${char.id}_basic_seg${i + 1}`,
                     type: 'basic_attack',
-                    name: `A${i + 1}`,
+                    name: seg.name || `A${i + 1}`,
                     kind: 'attack_segment',
-                    duration: Number(seg.duration) || 0,
+                    ...seg,
+                    duration: (Number(seg.duration) || 0) / 60,
                     hitTicks: seg.hit_ticks || [],
-                    cancelWindows: seg.cancel_windows || {},
-                    ...seg 
+                    cancelWindows: seg.cancel_windows || {}
                 }))
                 return {
                     id: `${char.id}_basic`,
@@ -646,7 +646,14 @@ export const useTimelineStore = defineStore('timeline', () => {
             }
         })
 
-        return [...standard, ...(char.variants || [])].sort((a, b) => (TYPE_ORDER[a.type] || 99) - (TYPE_ORDER[b.type] || 99))
+    const variants = (char.variants || []).map(v => ({
+            ...v,
+            duration: (Number(v.duration) || 0) / 60,
+            hitTicks: v.hit_ticks || [],
+            cancelWindows: v.cancel_windows || []
+        }))
+
+        return [...standard, ...variants].sort((a, b) => (TYPE_ORDER[a.type] || 99) - (TYPE_ORDER[b.type] || 99))
     })
 
     function setTimelineShift(v) { timelineShift.value = Math.min(Math.max(0, v), totalTimelineWidthPx.value - timelineRect.value.width) }
@@ -694,6 +701,23 @@ export const useTimelineStore = defineStore('timeline', () => {
         tracks.value[fromIndex] = tracks.value[toIndex]
         tracks.value[toIndex] = temp
         commitState()
+    }
+
+    function selectLibrarySkill(skillId, source = 'character') {
+        const normalizedSource = source || 'character'
+        const isSame = (selectedLibrarySkillId.value === skillId && selectedLibrarySource.value === normalizedSource)
+        if (skillId) {
+            clearSelection()
+            if (!isSame) {
+                selectedLibrarySkillId.value = skillId
+                selectedLibrarySource.value = normalizedSource
+            } else {
+                selectedLibrarySource.value = normalizedSource
+            }
+        } else {
+            selectedLibrarySkillId.value = null
+            selectedLibrarySource.value = normalizedSource
+        }
     }
 
     function selectAction(instanceId) {
@@ -857,6 +881,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         timeToPx, pxToTime, formatAxisTimeLabel, setPrepDuration,
         globalExtensions, getShiftedEndTime, refreshAllActionShifts,
 
-        isCharacterInTeam, changeTrackOperator, clearTrackOperator, moveTrack, setDraggingSkill, selectAction
+        isCharacterInTeam, changeTrackOperator, clearTrackOperator, moveTrack, setDraggingSkill, selectAction, selectLibrarySkill
     }
 })

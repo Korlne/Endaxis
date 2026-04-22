@@ -296,7 +296,10 @@
     "ultimate": "终结技",
     "weapon": "武器",
     "set": "套装",
-    "unknown": "技能"
+    "unknown": "技能",
+    "basic_attack": "普通攻击",
+    "special_attack": "特殊技",
+    "variant": "变体"
   },
   "enemyTier": {
     "normal": "普通",

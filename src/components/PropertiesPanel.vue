@@ -270,12 +270,8 @@ function getIconPath(type, charId = null) {
         <div class="panel-tag-mini">{{ t('propertiesPanel.sections.basic') }}</div>
         <div class="attribute-grid">
           <div class="form-group compact">
-            <label>{{ t('propertiesPanel.labels.durationS') }}</label>
-            <CustomNumberInput :model-value="targetData.duration" @update:model-value="val => updateActionProp('duration', val)" :step="0.1" :min="0" :activeColor="HIGHLIGHT_COLORS.default" text-align="center"/>
-          </div>
-          <div class="form-group compact" v-if="currentSkillType === 'link'">
-            <label>{{ t('propertiesPanel.labels.cooldownS') }}</label>
-            <CustomNumberInput :model-value="targetData.cooldown" @update:model-value="val => updateActionProp('cooldown', val)" :min="0" :activeColor="HIGHLIGHT_COLORS.default" text-align="center"/>
+            <label>时长 (Tick)</label>
+            <CustomNumberInput :model-value="Math.round((targetData.duration || 0) * 60)" @update:model-value="val => updateActionProp('duration', val / 60)" :step="1" :min="0" :activeColor="HIGHLIGHT_COLORS.default" text-align="center"/>
           </div>
 
           <div class="form-group compact" v-if="isComboInstance">
@@ -299,10 +295,6 @@ function getIconPath(type, charId = null) {
             <CustomNumberInput :model-value="targetData.spCost" @update:model-value="val => updateActionProp('spCost', val)" :min="0" :border-color="HIGHLIGHT_COLORS.default" text-align="center"/>
           </div>
 
-          <div class="form-group compact" v-if="currentSkillType === 'ultimate'">
-            <label>{{ t('propertiesPanel.labels.gaugeCost') }}</label>
-            <CustomNumberInput :model-value="targetData.gaugeCost" @update:model-value="val => updateActionProp('gaugeCost', val)" :min="0" :border-color="HIGHLIGHT_COLORS.blue" text-align="center"/>
-          </div>
         </div>
       </div>
 
@@ -311,18 +303,26 @@ function getIconPath(type, charId = null) {
         <div class="attribute-grid">
           <div class="form-group compact full-width-col" style="grid-column: span 2;">
             <label>Hit Ticks (以逗号分隔)</label>
-            <input type="text" class="simple-input" :value="(targetData.hit_ticks || []).join(', ')" @change="e => {
+            <input type="text" class="simple-input" :value="(targetData.hitTicks || []).join(', ')" @change="e => {
               const arr = e.target.value.split(',').map(v => parseInt(v.trim())).filter(v => !isNaN(v));
-              updateActionProp('hit_ticks', arr);
+              updateActionProp('hitTicks', arr);
             }" placeholder="例如: 13, 24" />
           </div>
           <div class="form-group compact">
             <label>Combo 取消窗</label>
-            <CustomNumberInput :model-value="targetData.cancel_windows?.combo" @update:model-value="val => updateActionProp('cancel_windows', { ...targetData.cancel_windows, combo: val })" :min="0" border-color="#ff7875" text-align="center"/>
+            <CustomNumberInput :model-value="targetData.cancelWindows?.combo || 0" @update:model-value="val => updateActionProp('cancelWindows', { ...(targetData.cancelWindows || {}), combo: val })" :min="0" border-color="#ff7875" text-align="center"/>
           </div>
           <div class="form-group compact">
             <label>Swap 取消窗</label>
-            <CustomNumberInput :model-value="targetData.cancel_windows?.swap" @update:model-value="val => updateActionProp('cancel_windows', { ...targetData.cancel_windows, swap: val })" :min="0" border-color="#ff7875" text-align="center"/>
+            <CustomNumberInput :model-value="targetData.cancelWindows?.swap || 0" @update:model-value="val => updateActionProp('cancelWindows', { ...(targetData.cancelWindows || {}), swap: val })" :min="0" border-color="#ff7875" text-align="center"/>
+          </div>
+          <div class="form-group compact">
+            <label>Dodge 取消窗</label>
+            <CustomNumberInput :model-value="targetData.cancelWindows?.dodge || 0" @update:model-value="val => updateActionProp('cancelWindows', { ...(targetData.cancelWindows || {}), dodge: val })" :min="0" border-color="#ff7875" text-align="center"/>
+          </div>
+          <div class="form-group compact">
+            <label>Skill 取消窗</label>
+            <CustomNumberInput :model-value="targetData.cancelWindows?.skill || 0" @update:model-value="val => updateActionProp('cancelWindows', { ...(targetData.cancelWindows || {}), skill: val })" :min="0" border-color="#ff7875" text-align="center"/>
           </div>
         </div>
       </div>

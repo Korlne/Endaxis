@@ -178,7 +178,7 @@ function addVariant() {
     id: `var_${Date.now()}`,
     name: '自定义动作名称',
     type: 'variant',
-    duration: 1,
+    duration: 60, //60 tick
     hit_ticks: [],
     cancel_windows: []
   })
@@ -369,7 +369,7 @@ watch(selectedCharId, () => {
                   <button class="ea-btn ea-btn--sm ea-btn--fill-danger" @click="selectedChar[`${activeTab}_segments`].splice(idx, 1)">删除</button>
                 </div>
                 <div class="form-grid">
-                  <div class="form-group"><label>时长(s)</label><input type="number" step="0.01" v-model.number="seg.duration" /></div>
+                  <div class="form-group"><label>时长(tick)</label><input type="number" v-model.number="seg.duration" /></div>
                   <div class="form-group full-width">
                     <label>Hit Ticks (逗号分隔)</label>
                     <input type="text" :value="(seg.hit_ticks || []).join(', ')" @change="e => updateTicks(seg, e.target.value)" />
@@ -434,7 +434,7 @@ watch(selectedCharId, () => {
               <div v-for="(v, vIdx) in selectedChar.variants" :key="v.id" class="segment-card">
                 <div class="form-grid four-col">
                   <div class="form-group"><label>自定义动作名称</label><input type="text" v-model="v.name"></div>
-                  <div class="form-group"><label>持续时间 (秒)</label><input type="number" step="0.01" v-model.number="v.duration"></div>
+                  <div class="form-group"><label>持续时间 (tick)</label><input type="number" v-model.number="v.duration"></div>
                   <div class="form-group full-width"><label>Hit Ticks (用逗号分隔)</label>
                     <input type="text" :value="(v.hit_ticks || []).join(', ')" @change="e => updateTicks(v, e.target.value)">
                   </div>
@@ -446,7 +446,7 @@ watch(selectedCharId, () => {
                   </div>
                   <div v-for="(cw, cwIdx) in v.cancel_windows" :key="cwIdx" style="display: flex; gap: 10px; margin-bottom: 8px; align-items: center;">
                     <input type="text" v-model="cw.name" placeholder="窗口名称" class="mini-input" style="flex: 1;">
-                    <input type="number" step="0.01" v-model.number="cw.time" placeholder="帧数" class="mini-input" style="width: 120px;">
+                    <input type="number" v-model.number="cw.time" placeholder="帧数" class="mini-input" style="width: 120px;">
                     <button class="ea-btn ea-btn--sm ea-btn--fill-danger" @click="v.cancel_windows.splice(cwIdx, 1)">删除</button>
                   </div>
                 </div>
