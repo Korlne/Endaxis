@@ -122,7 +122,6 @@ function openCharacterSelector(index) {
   isSelectorVisible.value = true
 }
 
-// 修改点：确保干员唯一上场，重复选择时执行置换逻辑
 function confirmCharacterSelection(charId) {
   if (targetTrackIndex.value === null) return
   
@@ -135,7 +134,7 @@ function confirmCharacterSelection(charId) {
   const track = store.tracks[targetTrackIndex.value]
   if (track && track.id !== charId) {
     track.id = charId
-    track.actions = [] // 切换干员清空旧技能
+    track.actions = [] 
     store.commitState()
   }
   
@@ -153,7 +152,6 @@ function removeOperator() {
   isSelectorVisible.value = false
 }
 
-// 弹窗关闭后的彻底清理
 function handleSelectorClosed() {
   targetTrackIndex.value = null
   searchQuery.value = ''
@@ -726,7 +724,7 @@ onMounted(() => {
         <div v-for="boundary in store.cycleBoundaries" :key="boundary.id" class="cycle-guide" :class="{ 'is-selected': boundary.id === store.selectedCycleBoundaryId }" :style="{ left: `${store.timeToPx(boundary.time)}px` }" @mousedown="onCycleLineMouseDown($event, boundary.id)"></div>
         <div v-if="isBoxSelecting" class="selection-box-overlay" :style="{ left: `${boxRect.left}px`, top: `${boxRect.top}px`, width: `${boxRect.width}px`, height: `${boxRect.height}px` }"></div>
         <div class="tracks-content">
-          <div v-for="(track, index) in store.tracks" :key="index" class="track-row" :id="`track-row-${index}`" :style="{ '--track-height': `${TRACK_HEIGHT}px` }" @dragover.prevent @drop="onTrackDrop(track, $event)">
+          <div v-for="(track, index) in store.tracks" :key="index" class="track-row" :id="`track-row-${index}`" @dragover.prevent @drop="onTrackDrop(track, $event)">
             <div class="track-lane" :style="getTrackLaneStyle" ref="trackLaneRefs" :data-track-index="index">
               <div class="actions-container">
                 <ActionItem v-memo="[action]" v-for="action in track.actions" :key="action.instanceId" :action="action" @mousedown="onActionMouseDown($event, track, action)" @mousemove="updateAlignGuide($event, action)" @mouseleave="hideAlignGuide" />
@@ -836,7 +834,6 @@ onMounted(() => {
   transform: translateY(-4px);
 }
 
-/* 稀有度颜色及发光特效 */
 .roster-card[data-rarity="6"]:hover {
   border-color: #ffd700;
   box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
@@ -902,7 +899,16 @@ onMounted(() => {
 /* ==========================================================================
    Timeline Grid Layout
    ========================================================================== */
-.timeline-grid-layout { display: grid; grid-template-columns: 180px 1fr; grid-template-rows: var(--grid-row-height, 60px) 1fr 14px; width: 100%; height: 100%; overflow: hidden; user-select: none; }
+.timeline-grid-layout {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  grid-template-rows: var(--grid-row-height, 60px) 1fr; 
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
 
 .corner-placeholder { 
   background: #3a3a3a; border-bottom: 1px solid #444; border-right: 1px solid #444; padding: 6px; 
@@ -919,16 +925,195 @@ onMounted(() => {
 .mini-tool-btn { height: 18px; padding: 0 4px; background: #2b2b2b; border: 1px solid #555; color: #888; cursor: pointer; border-radius: 2px; font-size: 9px; display: flex; align-items: center; gap: 2px; }
 .mini-tool-btn.is-active { color: #ffd700; border-color: #ffd700; background: rgba(255, 215, 0, 0.05); }
 
-.tracks-header-sticky { grid-column: 1 / 2; grid-row: 2 / 3; background: #3a3a3a; border-right: 1px solid #444; overflow: hidden; padding-top: 20px;}
-.track-info { min-height: 110px; display: flex; align-items: center; padding-left: 8px; border-bottom: 1px solid #444; transition: background 0.2s; }
+/* 1. 修复布局向下扩展 (容器撑满) */
+.tracks-header-sticky {
+  grid-column: 1 / 2;
+  grid-row: 2 / 3;
+  width: 180px;
+  background: #3a3a3a;
+  display: flex;
+  flex-direction: column;
+  z-index: 6;
+  border-right: 1px solid #444;
+  padding: 20px 0;
+  overflow: hidden; /* 关键：防止滚动条溢出 */
+  box-sizing: border-box;
+  height: 100%; /* 强制铺满 grid 区域 */
+}
+
+.track-info {
+  flex: 1; 
+  min-height: 110px; 
+  height: auto;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  background: #3a3a3a;
+  padding-left: 4px;
+  transition: background 0.2s;
+  border: 1px solid transparent;
+}
+
 .track-info.is-active { background: #4a5a6a; }
 
-.avatar-image { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #555; }
-.avatar-placeholder { width: 44px; height: 44px; border-radius: 50%; background: #444; border: 2px dashed #666; }
+/* ==========================================================================
+   释放左侧排序控件
+   ========================================================================== */
+.track-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex-shrink: 0; 
+  gap: 2px;
+  color: #888;
+  margin-right: 4px; 
+}
 
-.tracks-content-viewport { grid-column: 2 / 3; grid-row: 2 / 3; background: #18181c; overflow-y: auto; overflow-x: hidden; position: relative; }
-.track-row { min-height: 50px; padding: 30px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
-.track-lane { position: relative; height: 50px; background: rgba(255, 255, 255, 0.02); }
+/* 3. 强制显示排序按键与选中效果 */
+.reorder-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #888;
+}
+
+.reorder-btn polyline {
+  stroke: #888 !important; /* 强制画笔颜色 */
+  stroke-width: 3px !important; /* 强制线宽 */
+  fill: none !important;
+}
+
+.reorder-btn:hover polyline {
+  stroke: #ffd700 !important;
+}
+
+/* 2. 收紧选人触发区 (与头像范围一致) */
+.char-select-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* 居中对齐 */
+  justify-content: center;
+  flex: 0 0 10px; /* 锁定宽度为 60px，不再占据剩余 100% */
+  height: 20%;
+  padding: 0;
+  gap: 0;
+  position: relative;
+  margin: 0 auto; /* 在父级中居中 */
+}
+
+/* 隐藏或收缩文字信息，确保不干扰范围 */
+.trigger-info {
+  display: none; /* 既然要范围一致，通常只需显示头像 */
+}
+
+/* ==========================================================================
+   主视口与轨道行样式
+   ========================================================================== */
+.tracks-content-viewport {
+  grid-column: 2 / 3;
+  grid-row: 2 / 3;
+  width: 100%;
+  height: 100%; /* 强制撑开 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  background: #18181c;
+}
+
+.tracks-content {
+  position: relative;
+  width: fit-content;
+  min-width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0; 
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.track-row {
+  --track-height: 50px;
+  position: relative;
+  flex: 1; 
+  min-height: 280px;
+  height: auto;
+  box-sizing: border-box;
+  padding-top: 30px;
+  padding-bottom: 30px;
+  width: fit-content;
+  min-width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.track-lane {
+  position: relative;
+  height: var(--track-height, 50px);
+  display: flex;
+  background: rgba(255, 255, 255, 0.02);
+  /* 关键：默认留出 2px 的透明边框占位，防止选中时上下挤压抖动 */
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  box-sizing: border-box;
+}
+
+/* 轨道高亮 - 增加 !important 确保生效 */
+.track-row.is-active-drop .track-lane {
+  border-top: 2px dashed #c0c0c0 !important;
+  border-bottom: 2px dashed #c0c0c0 !important;
+  background: rgba(255, 255, 255, 0.02) !important; /* 恢复原版的背景色，不添加额外高亮 */
+  z-index: 5 !important;
+}
+
+/* ==========================================================================
+   修复头像悬浮遮罩偏移
+   ========================================================================== */
+.trigger-avatar-box {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  margin-right: 0; /* 移除右间距 */
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.avatar-image {
+  display: block;
+  width: 100%;  
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #555;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.avatar-change-hint {
+  position: absolute; 
+  top: 0; 
+  left: 0; 
+  width: 100%; 
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6); 
+  border-radius: 50%;
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  color: #fff; 
+  opacity: 0; 
+  transition: opacity 0.2s; 
+  pointer-events: none;
+  z-index: 10; 
+}
+
+.avatar-placeholder { width: 44px; height: 44px; border-radius: 50%; background: #444; border: 2px dashed #666; }
 
 .ruler-content-container { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
 .prep-zone-bg { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.04); border-right: 1px solid rgba(255, 255, 255, 0.12); pointer-events: none; z-index: 0; }
@@ -943,13 +1128,6 @@ onMounted(() => {
 .tick-line.frame { height: 5px; background: rgba(255, 255, 255, 0.2); }
 .tick-label { position: absolute; left: 3px; bottom: 1px; white-space: nowrap; font-family: 'Roboto Mono', monospace; font-size: 10px; color: #888; user-select: none; pointer-events: none; line-height: 1; }
 .tick-line.major .tick-label { color: #e0e0e0; font-weight: bold; font-size: 11px; }
-
-.trigger-avatar-box {
-  position: relative;
-  margin-right: 8px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
 
 .cursor-guide {
   position: absolute;
@@ -1010,15 +1188,6 @@ onMounted(() => {
 
 .selection-box-overlay { position: absolute; background: rgba(255, 215, 0, 0.15); border: 1px solid #ffd700; pointer-events: none; z-index: 100; }
 
-/* ==========================================================================
-   新增样式追加区
-   ========================================================================== */
-.avatar-change-hint {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  background-color: rgba(0, 0, 0, 0.6); border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; opacity: 0; transition: opacity 0.2s; pointer-events: none;
-}
 .trigger-avatar-box:hover .avatar-change-hint { opacity: 1; }
 .trigger-avatar-box:hover .avatar-image { border-color: #ffd700; }
 
