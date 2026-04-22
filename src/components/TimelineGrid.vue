@@ -591,9 +591,19 @@ function onActionMouseDown(evt, track, action) {
 
 function updateDragPosition(clientX) {
   if (!isDragStarted.value || !movingActionId.value) return
-  const deltaTime = Math.round(store.pxToTime(store.toTimelineSpace(clientX, 0).x) - dragStartMouseTime.value)
-  store.tracks.forEach(t => t.actions.forEach(a => { if (store.multiSelectedIds.has(a.instanceId) && !a.isLocked) a.startTime = Math.max(0, Math.round(dragStartTimes.get(a.instanceId) + deltaTime)) }))
-  store.refreshAllActionShifts(); nextTick(() => svgRenderKey.value++)
+  const timelineX = store.toTimelineSpace(clientX, 0).x
+  const mouseTime = store.pxToTime(timelineX)
+  const deltaTime = mouseTime - dragStartMouseTime.value
+  const snap = store.snapStep || 0.1
+
+  store.tracks.forEach(t => t.actions.forEach(a => { 
+    if (store.multiSelectedIds?.has(a.instanceId) && !a.isLocked) {
+      const targetTime = dragStartTimes.get(a.instanceId) + deltaTime
+      a.startTime = Math.max(0, snapMs(Math.round(targetTime / snap) * snap))
+    }
+  }))
+  if (typeof store.refreshAllActionShifts === 'function') store.refreshAllActionShifts()
+  nextTick(() => svgRenderKey.value++)
 }
 
 function onWindowMouseMove(evt) {
@@ -746,7 +756,7 @@ onMounted(() => {
           <div v-for="(track, index) in store.tracks" :key="index" class="track-row" :id="`track-row-${index}`" :class="{ 'is-active': track.id && track.id === store.activeTrackId }" @dragover.prevent @drop="onTrackDrop(track, $event)">
             <div class="track-lane" :style="getTrackLaneStyle" ref="trackLaneRefs" :data-track-index="index">
               <div class="actions-container">
-                <ActionItem v-memo="[action]" v-for="action in track.actions" :key="action.instanceId" :action="action" @mousedown="onActionMouseDown($event, track, action)" @mousemove="updateAlignGuide($event, action)" @mouseleave="hideAlignGuide" />
+                <ActionItem v-for="action in track.actions" :key="action.instanceId" :action="action" @mousedown="onActionMouseDown($event, track, action)" @mousemove="updateAlignGuide($event, action)" @mouseleave="hideAlignGuide" />
               </div>
             </div>
           </div>

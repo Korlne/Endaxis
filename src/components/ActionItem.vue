@@ -38,7 +38,6 @@ const displayLabel = computed(() => {
   }
 
   if (props.action.kind === 'attack_segment') {
-      // 直接使用 Store 中赋予的真实名称 (如 A1, E2) 和连携后缀
       return `${name}${suffix}`
     }
 
@@ -74,12 +73,10 @@ const themeColor = computed(() => {
 const actionLayout = computed(() => store.nodeRects[props.action.instanceId])
 
 function getDamageTickTitle(tick) {
-  if (!tick) return ''
-  return t('actionItem.tickTooltip', {
-    time: store.formatTimeLabel(tick.data?.offset),
-    stagger: tick.data?.stagger || 0,
-    sp: tick.data?.sp || 0,
-  })
+  if (!tick || !tick.data) return ''
+  // 兼容不同数据来源的字段命名
+  const timeVal = tick.data.offset ?? tick.data.time ?? tick.time ?? 0
+  return store.formatTimeLabel(timeVal)
 }
 
 // 连携冷却计算
@@ -215,7 +212,9 @@ const enhancementMetrics = computed(() => {
   if (!layout) return { widthPx: 0, extensionAmount: 0 }
 
   const start = Number(props.action.startTime) || 0
-  const end = store.getShiftedEndTime(start, props.action.duration || 0, props.action.instanceId)
+  const end = typeof store.getShiftedEndTime === 'function'
+    ? store.getShiftedEndTime(start, props.action.duration || 0, props.action.instanceId)
+    : (start + (props.action.duration || 0))
   const time = Number(props.action.enhancementTime) || 0
   if (time <= 0) return { widthPx: 0, extensionAmount: 0 }
 
@@ -223,7 +222,9 @@ const enhancementMetrics = computed(() => {
       ? store.getUltimateEnhancementMetrics?.(props.action.instanceId)
       : null
 
-  const finalEnd = ultimateMetrics?.finalEnd || store.getShiftedEndTime(end, time, props.action.instanceId)
+  const finalEnd = ultimateMetrics?.finalEnd || (typeof store.getShiftedEndTime === 'function' 
+    ? store.getShiftedEndTime(end, time, props.action.instanceId) 
+    : (end + time))
   const baseDuration = ultimateMetrics?.baseDuration ?? time
 
   const shiftedEnhDuration = finalEnd - end
@@ -275,10 +276,14 @@ const customBarsToRender = computed(() => {
     if (originalDuration <= 0) return null
 
     // 计算起始点的现实偏移
-    const shiftedStartTimestamp = store.getShiftedEndTime(props.action.startTime, originalOffset, props.action.instanceId)
+    const shiftedStartTimestamp = typeof store.getShiftedEndTime === 'function' 
+      ? store.getShiftedEndTime(props.action.startTime, originalOffset, props.action.instanceId) 
+      : ((props.action.startTime || 0) + originalOffset)
 
     // 计算受时停影响后的结束点，从而得出最终视觉时长
-    const shiftedEndTimestamp = store.getShiftedEndTime(shiftedStartTimestamp, originalDuration, props.action.instanceId)
+    const shiftedEndTimestamp = typeof store.getShiftedEndTime === 'function'
+      ? store.getShiftedEndTime(shiftedStartTimestamp, originalDuration, props.action.instanceId)
+      : (shiftedStartTimestamp + originalDuration)
     const shiftedDuration = shiftedEndTimestamp - shiftedStartTimestamp
 
     // 计算延长量
@@ -299,7 +304,6 @@ const customBarsToRender = computed(() => {
 
 // 计算动画时间的视觉宽度
 const animationTimeWidth = computed(() => {
-  // 从 Store 的计算结果中找到属于自己的那一项
   const myExtension = store.globalExtensions.find(ext => ext.sourceId === props.action.instanceId)
 
   if (myExtension) {
@@ -337,21 +341,25 @@ function hexToRgba(hex, alpha) {
 // 计算判定点的位置样式
 const renderableTicks = computed(() => {
   if (store.useNewCompiler) {
-    const resolvedAction = store.compiledTimeline.actionMap.get(props.action.instanceId)
-    return resolvedAction?.resolvedDamageTicks.map(tick => {
-        const left = store.timeToPx(tick.realTime) - store.timeToPx(resolvedAction.realStartTime)
-        return {
-            style: { left: `${left}px` },
-            data: tick
-        }
-    })
+    const resolvedAction = store.compiledTimeline?.actionMap?.get(props.action.instanceId)
+    if (resolvedAction && resolvedAction.resolvedDamageTicks) {
+      return resolvedAction.resolvedDamageTicks.map(tick => {
+          const left = store.timeToPx(tick.realTime) - store.timeToPx(resolvedAction.realStartTime)
+          return {
+              style: { left: `${left}px` },
+              data: tick
+          }
+      })
+    }
   }
 
   const ticks = props.action.damageTicks || []
 
   return ticks.map(tick => {
     const originalOffset = tick.offset || 0
-    const shiftedTimestamp = store.getShiftedEndTime(props.action.startTime, originalOffset, props.action.instanceId)
+    const shiftedTimestamp = typeof store.getShiftedEndTime === 'function' 
+      ? store.getShiftedEndTime(props.action.startTime, originalOffset, props.action.instanceId) 
+      : ((props.action.startTime || 0) + originalOffset)
     const left = store.timeToPx(shiftedTimestamp) - store.timeToPx(props.action.startTime)
     return {
       style: { left: `${left}px` },
@@ -534,7 +542,6 @@ function onIconClick(evt, item, flatIndex) {
 </template>
 
 <style scoped>
-/* === 基础容器 === */
 .action-item-wrapper {
   display: flex; align-items: center; justify-content: center;
   white-space: nowrap; cursor: grab; user-select: none;
@@ -543,12 +550,8 @@ function onIconClick(evt, item, flatIndex) {
   font-weight: bold; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 .action-item-wrapper:hover { filter: brightness(1.2); }
-
-/* === 异常状态层 === */
 .anomalies-overlay { position: absolute; top: 0; left: -1px; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .anomaly-wrapper { position: absolute; display: flex; align-items: center; pointer-events: none; white-space: nowrap; bottom: 100% }
-
-/* 图标样式 */
 .anomaly-icon-box {
   width: 20px; height: 20px; background-color: #333; border: 1px solid #999;
   box-sizing: border-box; display: flex; align-items: center; justify-content: center;
@@ -556,13 +559,11 @@ function onIconClick(evt, item, flatIndex) {
   transition: transform 0.1s, border-color 0.1s, box-shadow 0.2s;
 }
 .anomaly-icon-box:hover { border-color: #ffd700; transform: scale(1.2); z-index: 20; }
-
 .anomaly-icon { width: 100%; height: 100%; object-fit: cover; }
 .anomaly-stacks {
   position: absolute; bottom: -2px; right: -2px; background: rgba(0, 0, 0, 0.8);
   color: #ffd700; font-size: 8px; padding: 0 2px; line-height: 1; border-radius: 2px;
 }
-
 .status-icon {
   position: absolute;
   top: 2px;
@@ -571,14 +572,8 @@ function onIconClick(evt, item, flatIndex) {
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8));
   pointer-events: none;
 }
-.lock-icon {
-  left: 2px;
-}
-.mute-icon {
-  right: 2px;
-}
-
-/* 伤害节点样式 */
+.lock-icon { left: 2px; }
+.mute-icon { right: 2px; }
 .damage-ticks-layer {
   position: absolute;
   top: 0;
@@ -588,7 +583,6 @@ function onIconClick(evt, item, flatIndex) {
   pointer-events: none;
   z-index: 12;
 }
-
 .damage-tick-wrapper {
   position: absolute;
   top: 0;
@@ -602,7 +596,6 @@ function onIconClick(evt, item, flatIndex) {
   pointer-events: auto;
   z-index: 20;
 }
-
 .tick-marker {
   width: 6px;
   height: 6px;
@@ -612,7 +605,6 @@ function onIconClick(evt, item, flatIndex) {
   box-shadow: 0 1px 2px rgba(0,0,0,0.5);
   transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
-
 .damage-tick-wrapper:hover .tick-marker {
   background-color: #ffd700;
   border-color: #fff;
@@ -620,8 +612,6 @@ function onIconClick(evt, item, flatIndex) {
   box-shadow: 0 0 8px rgba(255, 215, 0, 1);
   z-index: 30;
 }
-
-/* === 时长条样式 === */
 .anomaly-duration-bar {
   height: 16px; border: none; border-radius: 2px; position: relative;
   display: flex; align-items: center; overflow: visible;
@@ -637,8 +627,6 @@ function onIconClick(evt, item, flatIndex) {
   position: absolute; left: 4px; font-size: 11px; color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); z-index: 2; font-weight: bold; line-height: 1; font-family: sans-serif;
 }
-
-/* === 被消耗节点 === */
 .transfer-node-wrapper {
   position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
   width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;
@@ -661,19 +649,15 @@ function onIconClick(evt, item, flatIndex) {
   top: 50%;
   transform: translate(-50%, -50%);
 }
-
-/* === 其他样式 === */
 .bottom-bar { 
   bottom: 0;
   left: 0;
   position: absolute;
  }
-
 .cd-bar-container { position: absolute; height: 2px; display: flex; align-items: center; pointer-events: none; }
 .cd-line { flex-grow: 1; height: 2px; }
 .cd-text { position: absolute; left: 0; top: 4px; font-size: 10px; font-weight: bold; line-height: 1; }
 .cd-end-mark { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 1px; height: 8px; }
-
 .custom-blue-bar { height: 2px; display: flex; align-items: center; color: #69c0ff; z-index: 5; }
 .cb-line { flex-grow: 1; height: 2px; background-color: #69c0ff; }
 .cb-label {
@@ -683,7 +667,6 @@ function onIconClick(evt, item, flatIndex) {
 }
 .cb-duration { position: absolute; left: 0; top: 4px; font-size: 10px; font-weight: bold; line-height: 1; color: #69c0ff; display: flex; align-items: center; }
 .cb-end-mark { position: absolute; right: 0; width: 1px; height: 8px; background-color: #69c0ff; top: 50%; transform: translateY(-50%); }
-
 .trigger-window-bar {
   position: absolute; --tw-width: 0px; --tw-color: transparent;
   width: var(--tw-width); height: 2px;
@@ -693,7 +676,6 @@ function onIconClick(evt, item, flatIndex) {
 .trigger-window-bar::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); height: 2px; background-color: var(--tw-color); opacity: 1; border-radius: 2px 0 0 2px; }
 .tw-separator { position: absolute; right: 0; top: -2px; width: 1px; height: 8px; background-color: var(--tw-color); transform: translateX(50%); }
 .tw-dot { position: absolute; left: 0; top: 50%; width: 1px; height: 8px; background-color: var(--tw-color); border-radius: 0; z-index: 6; transform: translate(-50%, -50%); }
-
 .ultimate-side-bar {
   position: absolute;
   top: 0;
@@ -702,17 +684,8 @@ function onIconClick(evt, item, flatIndex) {
   z-index: 2;
   pointer-events: none;
 }
-
-.left-bar {
-  left: 0;
-  border-radius: 2px 0 0 2px;
-}
-
-.right-bar {
-  right: 0;
-  border-radius: 0 2px 2px 0;
-}
-
+.left-bar { left: 0; border-radius: 2px 0 0 2px; }
+.right-bar { right: 0; border-radius: 0 2px 2px 0; }
 .animation-phase-overlay {
   position: absolute;
   top: 0;
@@ -724,7 +697,6 @@ function onIconClick(evt, item, flatIndex) {
   border-right: 1px solid rgba(255, 255, 255, 0.3);
   z-index: 1;
 }
-
 .shimmer-bar {
   position: absolute;
   inset: 0;
@@ -738,13 +710,8 @@ function onIconClick(evt, item, flatIndex) {
   will-change: transform;
   animation: shimmer 1.5s infinite linear;
 }
-
 @keyframes shimmer {
-  0% { 
-    transform: translateX(-100%); 
-  }
-  100% { 
-    transform: translateX(50%); 
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(50%); }
 }
 </style>

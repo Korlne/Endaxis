@@ -126,7 +126,6 @@ function normalizePrepConfig(snapshot) {
 }
 
 function normalizeAttackSegmentsForCharacter(char) {
-    // 此处逻辑在全局重置背景下主要用于确保数组结构存在
     if (!char) return
     if (!Array.isArray(char.basic_attack_segments)) char.basic_attack_segments = []
     if (!Array.isArray(char.special_attack_segments)) char.special_attack_segments = []
@@ -600,7 +599,7 @@ export const useTimelineStore = defineStore('timeline', () => {
                     kind: 'attack_segment',
                     ...seg,
                     duration: (Number(seg.duration) || 0) / 60,
-                    hitTicks: seg.hit_ticks || [],
+                    damageTicks: seg.hit_ticks || [],
                     cancelWindows: seg.cancel_windows || {}
                 }))
                 return {
@@ -620,7 +619,7 @@ export const useTimelineStore = defineStore('timeline', () => {
                     name: `E${i + 1}`,
                     kind: 'attack_segment',
                     duration: Number(seg.duration) || 0,
-                    hitTicks: seg.hit_ticks || [],
+                    damageTicks: seg.hit_ticks || [],
                     cancelWindows: seg.cancel_windows || {},
                     ...seg
                 }))
@@ -641,7 +640,7 @@ export const useTimelineStore = defineStore('timeline', () => {
                 type,
                 name: getI18nSkillType(type),
                 duration: data.duration || 1,
-                hitTicks: data.hit_ticks || [],
+                damageTicks: data.hit_ticks || [],
                 cancelWindows: data.cancel_windows || { combo: 0, dodge: 0, skill: 0, swap: 0 }
             }
         })
@@ -649,7 +648,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     const variants = (char.variants || []).map(v => ({
             ...v,
             duration: (Number(v.duration) || 0) / 60,
-            hitTicks: v.hit_ticks || [],
+            damageTicks: v.hit_ticks || [],
             cancelWindows: v.cancel_windows || []
         }))
 
@@ -839,7 +838,10 @@ export const useTimelineStore = defineStore('timeline', () => {
             isLoading.value = false 
         }
     }
-
+    function setMultiSelection(idsArray) {
+        multiSelectedIds.value = new Set(idsArray)
+        if (idsArray.length === 1) { selectedActionId.value = idsArray[0] } else { selectedActionId.value = null }
+    }
     function setSelectedAnomalyId(id) { selectedAnomalyId.value = id }
     function setHoveredAction(id) { hoveredActionId.value = id }
     function nudgeSelection(dir) { /* stub */ }
@@ -881,6 +883,6 @@ export const useTimelineStore = defineStore('timeline', () => {
         timeToPx, pxToTime, formatAxisTimeLabel, setPrepDuration,
         globalExtensions, getShiftedEndTime, refreshAllActionShifts,
 
-        isCharacterInTeam, changeTrackOperator, clearTrackOperator, moveTrack, setDraggingSkill, selectAction, selectLibrarySkill
+        isCharacterInTeam, changeTrackOperator, clearTrackOperator, moveTrack, setDraggingSkill, selectAction, selectLibrarySkill, setMultiSelection
     }
 })
