@@ -804,10 +804,11 @@ export const useTimelineStore = defineStore('timeline', () => {
             const d = await executeFetch(); 
             if (d) { 
                 if (d.characterRoster) {
-                    characterRoster.value = d.characterRoster.sort((a, b) => b.rarity - a.rarity).map(c => { 
+                    characterRoster.value = d.characterRoster.map(c => { 
+                        if (!c.rarity) c.rarity = c.rank === 'S' ? 6 : 5;
                         normalizeAttackSegmentsForCharacter(c); 
                         return c 
-                    }); 
+                    }).sort((a, b) => b.rarity - a.rarity); 
                 }
                 iconDatabase.value = d.ICON_DATABASE || {}; 
             } 

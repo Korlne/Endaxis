@@ -9,7 +9,7 @@
     "characterRoster": [
       {
         "id": "char_1776769447109",
-        "name": "新代理人",
+        "name": "代理人1号",
         "rank": "S",
         "element": "Physical",
         "characteristic": "Attack",
@@ -160,7 +160,7 @@
       },
       {
         "id": "char_1776769445220",
-        "name": "新代理人",
+        "name": "代理人2号",
         "rank": "A",
         "element": "Physical",
         "characteristic": "Attack",

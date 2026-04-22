@@ -166,13 +166,16 @@ const filteredListFlat = computed(() => {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(c => c.name.toLowerCase().includes(q))
   }
-  return list.sort((a, b) => (b.rarity || 0) - (a.rarity || 0))
+  return list.sort((a, b) => {
+    const getR = (c) => c.rarity || (c.rank === 'S' ? 6 : 5)
+    return getR(b) - getR(a)
+  })
 })
 
 const rosterByRarity = computed(() => {
   const groups = { 'S': [], 'A': [] }
   filteredListFlat.value.forEach(char => {
-    const rank = char.rarity >= 6 ? 'S' : 'A'
+    const rank = (char.rank === 'S' || char.rarity >= 6) ? 'S' : 'A'
     groups[rank].push(char)
   })
   
@@ -182,9 +185,12 @@ const rosterByRarity = computed(() => {
   ].filter(g => g.list.length > 0)
 })
 
-function getRarityBaseColor(rarity) {
-  const colors = { 6: '#FFD700', 5: '#ffc400', 4: '#d8b4fe' }
-  return colors[rarity] || '#a0a0a0'
+function getRarityBaseColor(rank) {
+  const colors = { 
+    'S': '#FFD700', 6: '#FFD700',
+    'A': '#d8b4fe', 5: '#d8b4fe'
+  }
+  return colors[rank] || '#a0a0a0'
 }
 
 // ===================================================================================
@@ -724,7 +730,7 @@ onMounted(() => {
         <div v-for="boundary in store.cycleBoundaries" :key="boundary.id" class="cycle-guide" :class="{ 'is-selected': boundary.id === store.selectedCycleBoundaryId }" :style="{ left: `${store.timeToPx(boundary.time)}px` }" @mousedown="onCycleLineMouseDown($event, boundary.id)"></div>
         <div v-if="isBoxSelecting" class="selection-box-overlay" :style="{ left: `${boxRect.left}px`, top: `${boxRect.top}px`, width: `${boxRect.width}px`, height: `${boxRect.height}px` }"></div>
         <div class="tracks-content">
-          <div v-for="(track, index) in store.tracks" :key="index" class="track-row" :id="`track-row-${index}`" @dragover.prevent @drop="onTrackDrop(track, $event)">
+          <div v-for="(track, index) in store.tracks" :key="index" class="track-row" :id="`track-row-${index}`" :class="{ 'is-active': track.id && track.id === store.activeTrackId }" @dragover.prevent @drop="onTrackDrop(track, $event)">
             <div class="track-lane" :style="getTrackLaneStyle" ref="trackLaneRefs" :data-track-index="index">
               <div class="actions-container">
                 <ActionItem v-memo="[action]" v-for="action in track.actions" :key="action.instanceId" :action="action" @mousedown="onActionMouseDown($event, track, action)" @mousemove="updateAlignGuide($event, action)" @mouseleave="hideAlignGuide" />
@@ -763,7 +769,7 @@ onMounted(() => {
               v-for="char in group.list" 
               :key="char.id" 
               class="roster-card" 
-              :data-rarity="char.rarity"
+              :data-rarity="char.rarity || (char.rank === 'S' ? 6 : 5)"
               @click="confirmCharacterSelection(char.id)"
             >
               <div class="card-avatar-wrapper"><img :src="char.avatar" /></div>
@@ -843,18 +849,10 @@ onMounted(() => {
 }
 
 .roster-card[data-rarity="5"]:hover {
-  border-color: #ffc400;
-  box-shadow: 0 0 12px rgba(255, 196, 0, 0.3);
-}
-.roster-card[data-rarity="5"]:hover .card-avatar-wrapper {
-  border-color: #ffc400;
-}
-
-.roster-card[data-rarity="4"]:hover {
   border-color: #d8b4fe;
   box-shadow: 0 0 12px rgba(216, 180, 254, 0.3);
 }
-.roster-card[data-rarity="4"]:hover .card-avatar-wrapper {
+.roster-card[data-rarity="5"]:hover .card-avatar-wrapper {
   border-color: #d8b4fe;
 }
 
@@ -1070,6 +1068,13 @@ onMounted(() => {
   border-bottom: 2px dashed #c0c0c0 !important;
   background: rgba(255, 255, 255, 0.02) !important; /* 恢复原版的背景色，不添加额外高亮 */
   z-index: 5 !important;
+}
+
+.track-row.is-active .track-lane {
+  border-top: 2px dashed #ffffff !important;
+  border-bottom: 2px dashed #ffffff !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  z-index: 10;
 }
 
 /* ==========================================================================
