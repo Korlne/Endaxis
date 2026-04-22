@@ -4,9 +4,11 @@ import { refThrottled } from '@vueuse/core'
 import { useTimelineStore } from '../stores/timelineStore.js'
 import ActionItem from './ActionItem.vue'
 import GaugeOverlay from './GaugeOverlay.vue'
+import ContextMenu from './ContextMenu.vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
+import { snapMs } from '@/utils/precision.js'
 
 const store = useTimelineStore()
 const { t, locale } = useI18n()
@@ -18,11 +20,13 @@ const { t, locale } = useI18n()
 const TIME_BLOCK_WIDTH = computed(() => store.timeBlockWidth)
 provide('TIME_BLOCK_WIDTH', TIME_BLOCK_WIDTH)
 
+// Refs
 const tracksContentRef = ref(null)
 const timeRulerWrapperRef = ref(null)
 const tracksHeaderRef = ref(null)
 const trackLaneRefs = ref([])
 
+// Render State
 const svgRenderKey = ref(0)
 const scrollbarHeight = ref(0)
 const isCursorVisible = ref(false)
@@ -310,11 +314,17 @@ const dynamicTicks = refThrottled(rawDynamicTicks, 100);
 const formatGuideTime = (viewTime) => {
   const bt = viewTime - (store.prepDuration || 0)
   const abs = Math.abs(bt)
-  const totalFrames = Math.round(abs * 60)
+  const totalFrames = Math.floor(abs * 60 + 0.001) // 修复浮点精度造成的抖动
   const s = Math.floor(totalFrames / 60)
   const f = totalFrames % 60
   const sign = bt < -0.001 ? '-' : ''
   return `${sign}${s}s ${String(f).padStart(2, '0')}t`
+}
+
+// [新增] 绕过 Store 缺失导出的 Bug，在本地直接安全修改时间轴平移量
+function setLocalTimelineShift(v) {
+  const maxShift = Math.max(0, store.totalTimelineWidthPx - (store.timelineRect?.width || 0))
+  store.timelineShift = Math.min(Math.max(0, v), maxShift)
 }
 
 const isPrepDurationEditorOpen = ref(false)
@@ -352,7 +362,7 @@ const fakeScrollbarRef = ref(null)
 let ticking = false
 function onFakeScroll(e) {
   if (ticking) return
-  ticking = true; store.setTimelineShift(e.target.scrollLeft)
+  ticking = true; setLocalTimelineShift(e.target.scrollLeft) // 已替换
   requestAnimationFrame(() => { ticking = false })
 }
 
@@ -372,7 +382,35 @@ function syncVerticalScroll() { if (tracksContentRef.value) store.setScrollTop(t
 function onGridMouseMove(evt) { store.setCursorPosition(evt.clientX, evt.clientY); isCursorVisible.value = true }
 function onGridMouseLeave() { isCursorVisible.value = false }
 
+const isPanning = ref(false)
+const panStartX = ref(0)
+const panStartShift = ref(0)
+
+function onPanMouseMove(evt) {
+  if (!isPanning.value) return
+  const deltaX = evt.clientX - panStartX.value
+  setLocalTimelineShift(panStartShift.value - deltaX) // 已替换
+}
+
+function onPanMouseUp(evt) {
+  if (isPanning.value) {
+    isPanning.value = false
+    window.removeEventListener('mousemove', onPanMouseMove)
+    window.removeEventListener('mouseup', onPanMouseUp)
+  }
+}
+
 function onContentMouseDown(evt) {
+  if (evt.button === 2) { // 拦截右键，开始平移
+    evt.preventDefault()
+    isPanning.value = true
+    panStartX.value = evt.clientX
+    panStartShift.value = store.timelineShift
+    window.addEventListener('mousemove', onPanMouseMove)
+    window.addEventListener('mouseup', onPanMouseUp)
+    return
+  }
+
   if (store.isBoxSelectMode) {
     evt.stopPropagation(); evt.preventDefault(); isBoxSelecting.value = true
     boxStart.value = store.toTimelineSpace(evt.clientX, evt.clientY)
@@ -380,6 +418,11 @@ function onContentMouseDown(evt) {
     window.addEventListener('mousemove', onBoxMouseMove); window.addEventListener('mouseup', onBoxMouseUp); return
   }
   if (evt.target === tracksContentRef.value || evt.target.classList.contains('track-row')) store.selectTrack(null)
+}
+
+function onContextMenu(evt) {
+  // 如果用户刚进行了右键平移拖拽，则屏蔽默认的右键菜单
+  if (Math.abs(evt.clientX - panStartX.value) > 3) evt.preventDefault()
 }
 
 function onCycleLineMouseDown(evt, boundaryId) {
@@ -416,14 +459,14 @@ function adjustZoom(delta, anchorTime = null) {
   if (anchorTime === null) anchorTime = store.pxToTime(store.timelineShift + store.timelineRect.width / 2)
   const offset = store.timeToPx(anchorTime) - store.timelineShift
   store.setBaseBlockWidth(oldWidth + delta)
-  store.setTimelineShift(store.timeToPx(anchorTime) - offset)
+  setLocalTimelineShift(store.timeToPx(anchorTime) - offset) // 已替换
 }
 
 function handleWheel(e) { if (e.ctrlKey) { e.preventDefault(); adjustZoom(e.deltaY < 0 ? Math.round(store.timeBlockWidth * 0.15) : -Math.round(store.timeBlockWidth * 0.15), store.cursorCurrentTime) } }
 function handleTrackWheel(e) {
   if (ticking) return
   if (e.ctrlKey) return handleWheel(e)
-  if (Math.abs(e.deltaX) > 0 || e.shiftKey) { e.preventDefault(); store.setTimelineShift(store.timelineShift + (e.shiftKey ? e.deltaY : e.deltaX)) }
+  if (Math.abs(e.deltaX) > 0 || e.shiftKey) { e.preventDefault(); setLocalTimelineShift(store.timelineShift + (e.shiftKey ? e.deltaY : e.deltaX)) } // 已替换
 }
 
 const alignGuide = ref({ visible: false, x: 0, top: 0, height: 0, label: '', type: '', color: '', iconKey: '', targetRect: null })
@@ -505,7 +548,8 @@ function onWindowMouseMove(evt) {
   autoScrollSpeed.value = evt.clientX < r.left + SCROLL_ZONE ? -MAX_SCROLL_SPEED : (evt.clientX > r.right - SCROLL_ZONE ? MAX_SCROLL_SPEED : 0)
   if (autoScrollSpeed.value !== 0 && !autoScrollRaf) autoScrollRaf = requestAnimationFrame(function scroll() {
     if (!autoScrollSpeed.value) return autoScrollRaf = null
-    store.setTimelineShift(store.timelineShift + autoScrollSpeed.value); updateDragPosition(lastMouseX); autoScrollRaf = requestAnimationFrame(scroll)
+    setLocalTimelineShift(store.timelineShift + autoScrollSpeed.value); // 已替换
+    updateDragPosition(lastMouseX); autoScrollRaf = requestAnimationFrame(scroll)
   })
   if (!autoScrollSpeed.value) updateDragPosition(evt.clientX)
 }
@@ -537,7 +581,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="timeline-grid-layout" :style="{ gridTemplateRows: `${gridRowHeight} 1fr` }">
+  <div class="timeline-grid-layout" :style="{ '--grid-row-height': gridRowHeight }">
     <div class="corner-placeholder">
       <div class="corner-controls">
         <div class="corner-zoom-row">
@@ -609,11 +653,10 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="tracks-content-viewport" ref="tracksContentRef" @mousedown="onContentMouseDown" @wheel="handleTrackWheel" @mousemove="onGridMouseMove" @mouseleave="onGridMouseLeave">
+    <div class="tracks-content-viewport" ref="tracksContentRef" @mousedown="onContentMouseDown" @wheel="handleTrackWheel" @mousemove="onGridMouseMove" @mouseleave="onGridMouseLeave" @contextmenu="onContextMenu">
       <div class="tracks-content-scroller" :style="transformStyle">
         <div v-if="store.showCursorGuide && !store.isBoxSelectMode" class="cursor-guide" :style="{ transform: `translateX(${store.cursorPosTimeline.x}px)` }" v-show="isCursorVisible">
-          <div class="guide-time-label">{{ formatGuideTime(store.cursorCurrentTime) }}</div>
-        </div>
+          <div class="guide-time-label">{{ formatGuideTime(store.pxToTime(store.cursorPosTimeline.x)) }}</div> </div>
         <div v-if="alignGuide.visible" class="align-guide-layer">
           <div class="target-highlight-box" :style="{ left: `${alignGuide.targetRect.left}px`, top: `${alignGuide.targetRect.top}px`, width: `${alignGuide.targetRect.width}px`, height: `${alignGuide.targetRect.height}px`, color: alignGuide.color }"></div>
           <div class="guide-line-vertical" :style="{ left: `${alignGuide.x}px`, color: alignGuide.color }"></div>
@@ -640,7 +683,10 @@ onMounted(() => {
           </div>
         </div>
       </div>
-      <div class="timeline-horizontal-scrollbar" ref="fakeScrollbarRef" @scroll="onFakeScroll"><div class="scrollbar-spacer" :style="{ width: `${totalWidthComputed}px` }"></div></div>
+    </div>
+
+    <div class="timeline-horizontal-scrollbar" ref="fakeScrollbarRef" @scroll="onFakeScroll">
+      <div class="scrollbar-spacer" :style="{ width: `${totalWidthComputed}px` }"></div>
     </div>
 
     <el-dialog v-model="isSelectorVisible" :title="t('timelineGrid.operatorDialog.title')" width="600px" align-center class="char-selector-dialog" :append-to-body="true">
@@ -667,7 +713,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.timeline-grid-layout { display: grid; grid-template-columns: 180px 1fr; grid-template-rows: 60px 1fr; width: 100%; height: 100%; overflow: hidden; user-select: none; }
+.timeline-grid-layout { display: grid; grid-template-columns: 180px 1fr; grid-template-rows: var(--grid-row-height, 60px) 1fr 14px; width: 100%; height: 100%; overflow: hidden; user-select: none; }
 
 .corner-placeholder { 
   background: #3a3a3a; border-bottom: 1px solid #444; border-right: 1px solid #444; padding: 6px; 
@@ -721,15 +767,20 @@ onMounted(() => {
 }
 
 .guide-time-label {
+  position: absolute;
+  top: 4px;
+  left: 2px;
   width: fit-content;
-  color: #ffffff;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffd700;
   font-size: 10px;
   font-weight: bold;
   font-family: monospace;
   padding: 2px 4px;
-  border-radius: 0 4px 4px 0;
+  border-radius: 4px;
   white-space: nowrap;
   line-height: 1;
+  pointer-events: none;
 }
 
 .align-guide-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2000; overflow: visible; }
@@ -743,7 +794,23 @@ onMounted(() => {
 
 @keyframes pulse-border { 0% { opacity: 0.4; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.02); } 100% { opacity: 0.4; transform: scale(1); } }
 
-.timeline-horizontal-scrollbar { position: sticky; bottom: 0; left: 0; width: 100%; height: 12px; overflow-x: auto; overflow-y: hidden; opacity: 0.7; z-index: 100; transition: opacity 0.2s; background: #18181c }.timeline-horizontal-scrollbar:hover { opacity: 1; }.scrollbar-spacer { height: 1px; }.prep-zone-controls { position: absolute; left: 0; top: auto; bottom: 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; pointer-events: none; z-index: 6; transform: translateX(-50%); }.prep-mini-btn { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; padding: 0; border: none; background: transparent; color: rgba(255, 255, 255, 0.85); cursor: pointer; border-radius: 6px; outline: none; transition: color 0.12s ease; pointer-events: auto; }.prep-mini-btn:hover { color: #ffd700; }.prep-duration-popover { position: absolute; top: 6px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(0, 0, 0, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); z-index: 50; }.prep-duration-input { width: 72px; height: 22px; background: rgba(255, 255, 255, 0.06); color: #fff; border: 1px solid rgba(255, 255, 255, 0.18); outline: none; padding: 0 6px; font-family: 'Roboto Mono', monospace; font-size: 12px; }.prep-duration-input:focus { border-color: rgba(255, 215, 0, 0.7); }.prep-duration-unit { color: rgba(255, 255, 255, 0.6); font-size: 12px; font-family: 'Roboto Mono', monospace; }
+.timeline-horizontal-scrollbar {
+  grid-column: 2 / 3;
+  grid-row: 3 / 4;
+  width: 100%;
+  height: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #18181c;
+  border-top: 1px solid #444;
+  z-index: 100;
+}
+.timeline-horizontal-scrollbar::-webkit-scrollbar { height: 12px; }
+.timeline-horizontal-scrollbar::-webkit-scrollbar-thumb { background: #555; border-radius: 6px; }
+.timeline-horizontal-scrollbar::-webkit-scrollbar-thumb:hover { background: #777; }
+.scrollbar-spacer { height: 1px; }
+
+.prep-zone-controls { position: absolute; left: 0; top: auto; bottom: 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; pointer-events: none; z-index: 6; transform: translateX(-50%); }.prep-mini-btn { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; padding: 0; border: none; background: transparent; color: rgba(255, 255, 255, 0.85); cursor: pointer; border-radius: 6px; outline: none; transition: color 0.12s ease; pointer-events: auto; }.prep-mini-btn:hover { color: #ffd700; }.prep-duration-popover { position: absolute; top: 6px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(0, 0, 0, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); z-index: 50; }.prep-duration-input { width: 72px; height: 22px; background: rgba(255, 255, 255, 0.06); color: #fff; border: 1px solid rgba(255, 255, 255, 0.18); outline: none; padding: 0 6px; font-family: 'Roboto Mono', monospace; font-size: 12px; }.prep-duration-input:focus { border-color: rgba(255, 215, 0, 0.7); }.prep-duration-unit { color: rgba(255, 255, 255, 0.6); font-size: 12px; font-family: 'Roboto Mono', monospace; }
 
 .selection-box-overlay { position: absolute; background: rgba(255, 215, 0, 0.15); border: 1px solid #ffd700; pointer-events: none; z-index: 100; }
 </style>
