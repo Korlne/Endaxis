@@ -22,14 +22,14 @@ export function useShareProject() {
     }
 
     // 2. 解析导入分享码
-    function importFromCode(code) {
+    async function importFromCode(code) {
         if (!code) {
             ElMessage.warning(t('timeline.share.inputRequired'))
             return false
         }
 
-        // 调用 Store 里的解压和合并逻辑
-        const success = store.importShareString(code)
+        // 调用 Store 里的解压和合并逻辑，并等待异步完成
+        const success = await store.importShareString(code)
 
         if (success) {
             ElMessage.success(t('timeline.share.imported'))

@@ -4,6 +4,7 @@ import { executeFetch } from '@/api/fetchStrategy.js'
 import { CORE_STATS, createDefaultStats } from '@/utils/coreStats.js'
 import { i18n } from '@/i18n'
 import { snapMs } from '@/utils/precision.js'
+import { compressGzip, decompressGzip } from '@/utils/gzipUtils.js'
 
 const tr = (key, params) => i18n.global.t(key, params)
 
@@ -748,6 +749,111 @@ if (type === 'special_attack') {
         }
     }
 
+function formatForExternal(projectData) {
+        const data = JSON.parse(JSON.stringify(projectData));
+        delete data.systemConstants;
+        
+        if (Array.isArray(data.scenarioList)) {
+            data.scenarioList.forEach(sc => {
+                if (sc.data) {
+                    if (sc.data.prepDuration !== undefined) sc.data.prepDuration = Math.round(sc.data.prepDuration * 60);
+                    delete sc.data.cycleBoundaries;
+                    delete sc.data.switchEvents;
+                    
+                    if (Array.isArray(sc.data.tracks)) {
+                        sc.data.tracks.forEach(track => {
+                            delete track.initialGauge;
+                            delete track.maxGaugeOverride;
+                            delete track.gaugeEfficiency;
+                            delete track.originiumArtsPower;
+                            delete track.stats;
+                            delete track.linkCdReduction;
+                            
+                            if (Array.isArray(track.actions)) {
+                                track.actions.forEach(a => {
+                                    if (a.duration !== undefined) a.duration = Math.round(a.duration * 60);
+                                    if (a.startTime !== undefined) a.startTime = Math.round(a.startTime * 60);
+                                    if (a.logicalStartTime !== undefined) a.logicalStartTime = Math.round(a.logicalStartTime * 60);
+                                    
+                                    delete a.damageTicks;
+                                    delete a.physicalAnomaly;
+                                    delete a.gaugeGain;
+                                    delete a.hit_ticks;
+                                    delete a.cancel_windows;
+                                    delete a.cancelWindows;
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        }
+        return data;
+    }
+
+    function parseFromExternal(externalData) {
+        const data = JSON.parse(JSON.stringify(externalData));
+        data.systemConstants = { ...DEFAULT_SYSTEM_CONSTANTS };
+        
+        if (Array.isArray(data.scenarioList)) {
+            data.scenarioList.forEach(sc => {
+                if (sc.data) {
+                    if (sc.data.prepDuration !== undefined) sc.data.prepDuration = sc.data.prepDuration / 60;
+                    sc.data.cycleBoundaries = [];
+                    sc.data.switchEvents = [];
+                    
+                    if (Array.isArray(sc.data.tracks)) {
+                        sc.data.tracks.forEach(track => {
+                            track.initialGauge = 0;
+                            track.maxGaugeOverride = null;
+                            track.gaugeEfficiency = 100;
+                            track.originiumArtsPower = 0;
+                            track.stats = createDefaultStats();
+                            track.linkCdReduction = 0;
+                            
+                            if (Array.isArray(track.actions)) {
+                                track.actions.forEach(a => {
+                                    if (a.duration !== undefined) a.duration = a.duration / 60;
+                                    if (a.startTime !== undefined) a.startTime = a.startTime / 60;
+                                    if (a.logicalStartTime !== undefined) a.logicalStartTime = a.logicalStartTime / 60;
+                                    
+                                    a.damageTicks = [];
+                                    a.physicalAnomaly = [];
+                                    a.gaugeGain = 0;
+                                    a.hit_ticks = [];
+                                    a.cancel_windows = {};
+                                    a.cancelWindows = {};
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        }
+        return data;
+    }
+
+    async function importShareString(code) {
+        try {
+            const jsonString = await decompressGzip(code);
+            const externalData = JSON.parse(jsonString);
+            const internalData = parseFromExternal(externalData);
+            
+            if (internalData.systemConstants) systemConstants.value = { ...systemConstants.value, ...internalData.systemConstants };
+            if (Array.isArray(internalData.scenarioList)) scenarioList.value = internalData.scenarioList;
+            if (internalData.activeScenarioId) activeScenarioId.value = internalData.activeScenarioId;
+            
+            const activeSc = scenarioList.value.find(s => s.id === activeScenarioId.value);
+            if (activeSc && activeSc.data) _loadSnapshot(activeSc.data);
+            
+            historyStack.value = []; historyIndex.value = -1; commitState();
+            return true;
+        } catch (e) {
+            console.error("Import failed:", e);
+            return false;
+        }
+    }
+
     function getProjectData({ includeScenarios = null } = {}) {
         let listToExport = JSON.parse(JSON.stringify(scenarioList.value))
 
@@ -769,13 +875,16 @@ if (type === 'special_attack') {
             }
         }
 
-        return {
+        const rawProjectData = {
             timestamp: Date.now(),
             version: '1.0.0',
             scenarioList: listToExport,
             activeScenarioId: activeScenarioId.value,
             systemConstants: systemConstants.value
         };
+        
+        // 核心修改：在导出时剥离多余数据并转换单位
+        return formatForExternal(rawProjectData);
     }
 
     function removeCurrentSelection() {
@@ -916,6 +1025,72 @@ if (type === 'special_attack') {
         contextMenu.value = { visible: true, x: evt.clientX, y: evt.clientY, targetId, clickTime }
     }
 
+    function loadProjectData(data) {
+        try {
+            if (data.systemConstants) { systemConstants.value = { ...systemConstants.value, ...data.systemConstants }; }
+
+            if (data.activeEnemyId) { activeEnemyId.value = data.activeEnemyId }
+
+            if (data.customEnemyParams) {
+                customEnemyParams.value = { ...customEnemyParams.value, ...data.customEnemyParams }
+            }
+
+            if (data.scenarioList) {
+                // normalize & migrate legacy scenarios
+                scenarioList.value = data.scenarioList.map(sc => {
+                    const cloned = JSON.parse(JSON.stringify(sc))
+                    if (cloned?.data) {
+                        const normalized = normalizePrepConfig(cloned.data)
+                        cloned.data = normalized.snapshot
+                    }
+                    return cloned
+                })
+                const validId = scenarioList.value.find(s => s.id === data.activeScenarioId) ? data.activeScenarioId : scenarioList.value[0].id
+                activeScenarioId.value = validId
+
+                const currentSc = scenarioList.value.find(s => s.id === activeScenarioId.value)
+                if (currentSc && currentSc.data) {
+                    _loadSnapshot(currentSc.data)
+                } else {
+                    tracks.value = createDefaultTracks();
+                    connections.value = [];
+                    characterOverrides.value = {};
+                    weaponOverrides.value = {};
+                    weaponStatuses.value = [];
+                    cycleBoundaries.value = [];
+                    switchEvents.value = [];
+                    equipmentCategoryOverrides.value = {};
+                    prepDuration.value = 5
+                    prepExpanded.value = true
+                }
+            }
+
+            clearSelection();
+            historyStack.value = [];
+            historyIndex.value = -1;
+            commitState();
+            return true;
+        } catch (err) {
+            console.error("Load project data failed:", err)
+            return false
+        }
+    }
+
+    async function importProject(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    const success = loadProjectData(data);
+                    if (success) resolve(true);
+                    else reject(new Error("Invalid data structure"));
+                } catch (err) { reject(err) }
+            };
+            reader.readAsText(file)
+        })
+    }
+
     return {
         setTrackLaneRect, setTimelineRect, setScrollTop, contextMenu, closeContextMenu, openContextMenu,
         togglePrepExpanded, setCursorPosition, toggleCursorGuide, toggleBoxSelectMode, toggleSnapStep, toggleNewCompiler,
@@ -931,7 +1106,7 @@ if (type === 'special_attack') {
         scenarioList, activeScenarioId, switchScenario, addScenario, duplicateScenario, deleteScenario,
         effectLayouts, getActionById, getEffectById, prepDuration, prepExpanded, viewDuration, prepZoneWidthPx, totalTimelineWidthPx,
         timeToPx, pxToTime, formatAxisTimeLabel, setPrepDuration,
-        globalExtensions, getShiftedEndTime, refreshAllActionShifts, exportProject,
+        globalExtensions, getShiftedEndTime, refreshAllActionShifts, exportProject, importShareString, parseFromExternal, importProject,
 
         isCharacterInTeam, changeTrackOperator, clearTrackOperator, moveTrack, setDraggingSkill, selectAction, selectLibrarySkill, setMultiSelection
     }
