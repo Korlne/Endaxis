@@ -674,6 +674,26 @@ if (type === 'special_attack') {
         })
     }
 
+    function exportProject({ filename } = {}) {
+        const projectData = getProjectData();
+
+        const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        const baseName = filename && filename.trim()
+            ? filename.trim()
+            : `endaxis_project_${new Date().toISOString().slice(0, 10)}.json`;
+        link.download = baseName.toLowerCase().endsWith('.json') ? baseName : `${baseName}.json`;
+        link.click();
+        URL.revokeObjectURL(link.href)
+    }
+
+    async function exportShareString({ includeScenarios = null } = {}) {
+        const projectData = getProjectData({ includeScenarios });
+        const jsonString = JSON.stringify(projectData);
+        return await compressGzip(jsonString);
+    }
+
     function addSkillToTrack(tid, skill, start) {
         const t = tracks.value.find(x => x.id === tid); if (!t) return
         const createAction = (s, st) => {
@@ -726,6 +746,36 @@ if (type === 'special_attack') {
             selectedActionId.value = instanceId
             multiSelectedIds.value.add(instanceId)
         }
+    }
+
+    function getProjectData({ includeScenarios = null } = {}) {
+        let listToExport = JSON.parse(JSON.stringify(scenarioList.value))
+
+        if (includeScenarios) {
+            const ids = Array.isArray(includeScenarios) ? includeScenarios : [includeScenarios];
+            const allowedSet = new Set(ids);
+            listToExport = listToExport.filter(s => allowedSet.has(s.id));
+        }
+
+        const currentSc = listToExport.find(s => s.id === activeScenarioId.value)
+        if (currentSc) {
+            currentSc.data = {
+                tracks: tracks.value,
+                characterOverrides: characterOverrides.value,
+                prepDuration: prepDuration.value,
+                prepExpanded: prepExpanded.value,
+                cycleBoundaries: cycleBoundaries.value,
+                switchEvents: switchEvents.value
+            }
+        }
+
+        return {
+            timestamp: Date.now(),
+            version: '1.0.0',
+            scenarioList: listToExport,
+            activeScenarioId: activeScenarioId.value,
+            systemConstants: systemConstants.value
+        };
     }
 
     function removeCurrentSelection() {
@@ -870,7 +920,7 @@ if (type === 'special_attack') {
         setTrackLaneRect, setTimelineRect, setScrollTop, contextMenu, closeContextMenu, openContextMenu,
         togglePrepExpanded, setCursorPosition, toggleCursorGuide, toggleBoxSelectMode, toggleSnapStep, toggleNewCompiler,
         
-        MAX_SCENARIOS, toTimelineSpace, toViewportSpace, toGameTime, toRealTime,
+        MAX_SCENARIOS, toTimelineSpace, toViewportSpace, toGameTime, toRealTime, exportShareString,
         systemConstants, isLoading, characterRoster, iconDatabase, tracks, activeTrackId, timelineScrollTop, timelineShift, timelineRect, trackLaneRects, nodeRects, draggingSkillData,
         selectedActionId, selectedLibrarySkillId, selectedLibrarySource, multiSelectedIds, clipboard, isCapturing, setIsCapturing, showCursorGuide, isBoxSelectMode, cursorPosTimeline, cursorCurrentTime, cursorPosition, snapStep,
         selectedAnomalyId, setSelectedAnomalyId, updateTrackGaugeEfficiency,
@@ -881,7 +931,7 @@ if (type === 'special_attack') {
         scenarioList, activeScenarioId, switchScenario, addScenario, duplicateScenario, deleteScenario,
         effectLayouts, getActionById, getEffectById, prepDuration, prepExpanded, viewDuration, prepZoneWidthPx, totalTimelineWidthPx,
         timeToPx, pxToTime, formatAxisTimeLabel, setPrepDuration,
-        globalExtensions, getShiftedEndTime, refreshAllActionShifts,
+        globalExtensions, getShiftedEndTime, refreshAllActionShifts, exportProject,
 
         isCharacterInTeam, changeTrackOperator, clearTrackOperator, moveTrack, setDraggingSkill, selectAction, selectLibrarySkill, setMultiSelection
     }
